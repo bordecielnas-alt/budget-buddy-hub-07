@@ -60,7 +60,7 @@ Variables nécessaires :
 
 | Variable | Usage |
 | --- | --- |
-| `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` | client navigateur (build) |
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` | client navigateur, passés au build Docker comme secrets BuildKit |
 | `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | accès serveur |
 | `SUPABASE_SERVICE_ROLE_KEY` | opérations privilégiées (jetons, bootstrap admin) |
 
@@ -70,6 +70,6 @@ base Postgres : redémarrer le conteneur ne perd rien.
 ## Développement
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```

@@ -15,4 +15,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      env:
+        VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://example.invalid' }}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_ci_build' }}
+      run: |
+        docker build . \
+          --file Dockerfile \
+          --secret id=vite_supabase_url,env=VITE_SUPABASE_URL \
+          --secret id=vite_supabase_publishable_key,env=VITE_SUPABASE_PUBLISHABLE_KEY \
+          --tag my-image-name:$(date +%s)
