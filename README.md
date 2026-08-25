@@ -67,6 +67,42 @@ Variables nécessaires :
 Les données (comptes, écritures, réglages, historique de synchro) sont persistées en
 base Postgres : redémarrer le conteneur ne perd rien.
 
+## Build automatique GitHub Actions
+
+Le workflow `.github/workflows/docker-image.yml` est déclenché à chaque push ou pull request sur `main`.
+
+- Sur **pull request**, l'image est buildée sans être publiée.
+- Sur **push sur `main`** ou **tag `v*`**, l'image est buildée et publiée sur **GitHub Container Registry** :
+
+```text
+ghcr.io/<utilisateur>/<dépôt>:latest
+ghcr.io/<utilisateur>/<dépôt>:main
+ghcr.io/<utilisateur>/<dépôt>:commit-<sha>
+```
+
+### Secrets à configurer dans le dépôt
+
+Dans **Settings → Secrets and variables → Actions → Repository secrets**, ajoutez :
+
+| Secret | Description |
+| --- | --- |
+| `VITE_SUPABASE_URL` | URL Supabase/Lovable Cloud pour le build client |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Clé publique Supabase pour le build client |
+
+> La clé publishable est injectée via un secret BuildKit, elle ne reste pas dans les couches de l'image.
+
+### Permissions du workflow
+
+Le workflow demande `packages: write` pour pousser sur `ghcr.io`. Si le push échoue avec une erreur de permission, vérifiez dans **Settings → Actions → General → Workflow permissions** que l'option **Read and write permissions** est sélectionnée.
+
+### Utiliser l'image publiée
+
+```bash
+docker pull ghcr.io/<utilisateur>/<dépôt>:latest
+```
+
+Puis lancez-la avec les variables serveur nécessaires (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+
 ## Développement
 
 ```bash
