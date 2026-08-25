@@ -145,7 +145,7 @@ function AppearanceSection() {
               }`}
             >
               <span className="flex gap-1">
-                {theme.palette.map((color) => (
+                {theme.swatch.map((color: string) => (
                   <span
                     key={color}
                     className="size-4 rounded-full border border-border"
