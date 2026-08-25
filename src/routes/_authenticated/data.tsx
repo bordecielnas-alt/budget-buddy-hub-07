@@ -86,7 +86,7 @@ function DataPage() {
     const text = await file.text();
     try {
       const report = await runImport({ data: { payload: text, contentType: file.type || "text/csv" } });
-      toast.success(`${report.inserted} ajoutées, ${report.updated} mises à jour, ${report.skipped} ignorées`);
+      toast.success(`${report.added} ajoutées, ${report.updated} mises à jour, ${report.skipped} ignorées`);
       invalidate();
     } catch (error) {
       toast.error((error as Error).message);
