@@ -2,9 +2,9 @@ services:
   app:
     build:
       context: .
-      args:
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+      secrets:
+        - vite_supabase_url
+        - vite_supabase_publishable_key
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -14,3 +14,9 @@ services:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+
+secrets:
+  vite_supabase_url:
+    environment: VITE_SUPABASE_URL
+  vite_supabase_publishable_key:
+    environment: VITE_SUPABASE_PUBLISHABLE_KEY
