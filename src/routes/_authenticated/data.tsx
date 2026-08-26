@@ -85,7 +85,7 @@ function DataPage() {
     if (!file) return;
     const text = await file.text();
     try {
-      const report = await runImport({ data: { payload: text, contentType: file.type || "text/csv" } });
+      const report = await runImport({ data: { text, contentType: file.type || "text/csv" } });
       toast.success(`${report.added} ajoutées, ${report.updated} mises à jour, ${report.skipped} ignorées`);
       invalidate();
     } catch (error) {
