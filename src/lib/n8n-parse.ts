@@ -94,16 +94,20 @@ function normalizeType(input: string, amount: number): string {
   return amount >= 0 ? "Recettes" : "Dépenses";
 }
 
-/** Deterministic key so the same N8N row is recognised across imports. */
-function fallbackKey(row: NormalizedRow): string {
-  return [row.entry_date, row.payee, row.amount.toFixed(2), row.account, row.category]
-    .join("|")
-    .toLowerCase();
-}
-
-export function normalizeRows(rows: RawRow[]): { rows: NormalizedRow[]; skipped: number } {
+/**
+ * La table source expose exactement :
+ * id,Type,Date,Payee,Amount,Account,Description,Category,createdAt,updatedAt
+ * L'identifiant `id` est la clé de rapprochement (déduplication / mise à jour).
+ */
+export function normalizeRows(rows: RawRow[]): {
+  rows: NormalizedRow[];
+  skipped: number;
+  missingId: number;
+} {
   const normalized: NormalizedRow[] = [];
+  const seen = new Set<string>();
   let skipped = 0;
+  let missingId = 0;
 
   for (const raw of rows) {
     const source =
@@ -113,12 +117,20 @@ export function normalizeRows(rows: RawRow[]): { rows: NormalizedRow[]; skipped:
 
     const entry_date = normalizeDate(pick(source, ["Date", "date", "entry_date", "Jour"]));
     const amount = normalizeAmount(pick(source, ["Amount", "amount", "Montant", "montant"]));
-    if (!entry_date) {
+    const sourceKey = pick(source, ["id", "ID", "Id", "row_id", "uuid", "source_key"]);
+
+    if (!sourceKey) {
+      missingId += 1;
       skipped += 1;
       continue;
     }
+    if (!entry_date || seen.has(sourceKey)) {
+      skipped += 1;
+      continue;
+    }
+    seen.add(sourceKey);
 
-    const row: NormalizedRow = {
+    normalized.push({
       entry_type: normalizeType(pick(source, ["Type", "type", "entry_type", "Nature"]), amount),
       entry_date,
       payee: pick(source, ["Payee", "payee", "Bénéficiaire", "Beneficiaire", "Emetteur"]),
@@ -126,14 +138,11 @@ export function normalizeRows(rows: RawRow[]): { rows: NormalizedRow[]; skipped:
       account: pick(source, ["Account", "account", "Compte"]),
       description: pick(source, ["Description", "description", "Libellé", "Libelle", "Note"]),
       category: pick(source, ["Category", "category", "Catégorie", "Categorie"]),
-      source_key: pick(source, ["id", "ID", "Id", "row_id", "uuid", "source_key"]),
-    };
-
-    if (!row.source_key) row.source_key = fallbackKey(row);
-    normalized.push(row);
+      source_key: sourceKey,
+    });
   }
 
-  return { rows: normalized, skipped };
+  return { rows: normalized, skipped, missingId };
 }
 
 export function parsePayload(text: string, contentType: string): RawRow[] {
