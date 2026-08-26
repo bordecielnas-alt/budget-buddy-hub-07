@@ -195,7 +195,7 @@ export const importRows = createServerFn({ method: "POST" })
 
     let added = 0;
     let updated = 0;
-    const toInsert: Array<Record<string, unknown>> = [];
+    const toInsert: Array<NormalizedRow & { user_id: string; source: string; locally_modified: boolean }> = [];
 
     for (const row of rows) {
       const currentId = byKey.get(row.source_key);
