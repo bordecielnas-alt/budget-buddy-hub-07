@@ -175,18 +175,55 @@ export const importRows = createServerFn({ method: "POST" })
     const parsed = parsePayload(data.text, data.contentType);
     const { rows, skipped } = normalizeRows(parsed);
     if (rows.length === 0) {
-      return { added: 0, updated: 0, unchanged: 0, skipped, total: 0, message: "Aucune ligne exploitable." };
+      return {
+        added: 0,
+        updated: 0,
+        unchanged: 0,
+        skipped,
+        total: 0,
+        message: "Aucune ligne exploitable (la colonne id est obligatoire).",
+      };
     }
-    const { error } = await context.supabase.from("budget_entries").insert(
-      rows.map((row) => ({ ...row, user_id: context.userId, source: "import", locally_modified: false })),
-    );
-    if (error) throw new Error(error.message);
+
+    const { data: existing, error: readError } = await context.supabase
+      .from("budget_entries")
+      .select("id, source_key")
+      .eq("user_id", context.userId)
+      .not("source_key", "is", null);
+    if (readError) throw new Error(readError.message);
+    const byKey = new Map((existing ?? []).map((row) => [row.source_key as string, row.id as string]));
+
+    let added = 0;
+    let updated = 0;
+    const toInsert: Array<NormalizedRow & { user_id: string; source: string; locally_modified: boolean }> = [];
+
+    for (const row of rows) {
+      const currentId = byKey.get(row.source_key);
+      if (currentId) {
+        const { error } = await context.supabase
+          .from("budget_entries")
+          .update({ ...row, source: "import", locally_modified: false })
+          .eq("id", currentId)
+          .eq("user_id", context.userId);
+        if (error) throw new Error(error.message);
+        updated += 1;
+      } else {
+        toInsert.push({ ...row, user_id: context.userId, source: "import", locally_modified: false });
+        added += 1;
+      }
+    }
+
+    if (toInsert.length > 0) {
+      const { error } = await context.supabase.from("budget_entries").insert(toInsert);
+      if (error) throw new Error(error.message);
+    }
+
     return {
-      added: rows.length,
-      updated: 0,
+      added,
+      updated,
       unchanged: 0,
       skipped,
       total: rows.length,
-      message: `${rows.length} ligne(s) importée(s).`,
+      message: `${added} ajout(s), ${updated} mise(s) à jour par id, ${skipped} ignorée(s).`,
     };
   });

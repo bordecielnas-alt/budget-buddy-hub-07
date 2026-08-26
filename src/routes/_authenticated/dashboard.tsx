@@ -19,6 +19,8 @@ import { X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEntries } from "@/hooks/useEntries";
 import { formatMoney, formatMonth, isIncome, monthKey, type BudgetEntry } from "@/lib/budget-types";
@@ -53,9 +55,36 @@ const PALETTE = [
   "var(--chart-5)",
 ];
 
-function matches(entry: BudgetEntry, filters: Filters, ignore?: FilterKey) {
+function currentMonthRange() {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { from: iso(first), to: iso(last) };
+}
+
+function spanDays(from: string, to: string) {
+  const a = new Date(from).getTime();
+  const b = new Date(to).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
+function formatPeriod(key: string) {
+  if (key.length === 7) return formatMonth(key);
+  const [y, m, d] = key.split("-");
+  return `${d}/${m}/${y?.slice(2)}`;
+}
+
+function matches(
+  entry: BudgetEntry,
+  filters: Filters,
+  bucket: (date: string) => string,
+  ignore?: FilterKey,
+) {
   const checks: Array<[FilterKey, string]> = [
-    ["month", monthKey(entry.entry_date)],
+    ["month", bucket(entry.entry_date)],
     ["category", entry.category || "Sans catégorie"],
     ["account", entry.account || "Sans compte"],
     ["type", entry.entry_type],
@@ -70,11 +99,28 @@ function matches(entry: BudgetEntry, filters: Filters, ignore?: FilterKey) {
 function DashboardPage() {
   const { data: entries = [], isLoading } = useEntries();
   const [filters, setFilters] = useState<Filters>({});
+  const initialRange = useMemo(currentMonthRange, []);
+  const [from, setFrom] = useState(initialRange.from);
+  const [to, setTo] = useState(initialRange.to);
+
+  const daily = spanDays(from, to) <= 70;
+  const bucket = useMemo(
+    () => (date: string) => (daily ? date.slice(0, 10) : monthKey(date)),
+    [daily],
+  );
+
+  const scoped = useMemo(
+    () => entries.filter((e) => e.entry_date >= from && e.entry_date <= to),
+    [entries, from, to],
+  );
 
   const toggle = (key: FilterKey, value: string) =>
     setFilters((current) => ({ ...current, [key]: current[key] === value ? undefined : value }));
 
-  const filtered = useMemo(() => entries.filter((e) => matches(e, filters)), [entries, filters]);
+  const filtered = useMemo(
+    () => scoped.filter((e) => matches(e, filters, bucket)),
+    [scoped, filters, bucket],
+  );
 
   const totals = useMemo(() => {
     let income = 0;
@@ -88,21 +134,21 @@ function DashboardPage() {
 
   const monthly = useMemo(() => {
     const map = new Map<string, { month: string; recettes: number; depenses: number }>();
-    for (const entry of entries.filter((e) => matches(e, filters, "month"))) {
-      const key = monthKey(entry.entry_date);
-      const bucket = map.get(key) ?? { month: key, recettes: 0, depenses: 0 };
-      if (isIncome(entry)) bucket.recettes += Math.abs(entry.amount);
-      else bucket.depenses += Math.abs(entry.amount);
-      map.set(key, bucket);
+    for (const entry of scoped.filter((e) => matches(e, filters, bucket, "month"))) {
+      const key = bucket(entry.entry_date);
+      const slot = map.get(key) ?? { month: key, recettes: 0, depenses: 0 };
+      if (isIncome(entry)) slot.recettes += Math.abs(entry.amount);
+      else slot.depenses += Math.abs(entry.amount);
+      map.set(key, slot);
     }
     return [...map.values()]
       .sort((a, b) => a.month.localeCompare(b.month))
-      .map((row) => ({ ...row, solde: row.recettes - row.depenses, label: formatMonth(row.month) }));
-  }, [entries, filters]);
+      .map((row) => ({ ...row, solde: row.recettes - row.depenses, label: formatPeriod(row.month) }));
+  }, [scoped, filters, bucket]);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, number>();
-    for (const entry of entries.filter((e) => matches(e, filters, "category"))) {
+    for (const entry of scoped.filter((e) => matches(e, filters, bucket, "category"))) {
       if (isIncome(entry)) continue;
       const key = entry.category || "Sans catégorie";
       map.set(key, (map.get(key) ?? 0) + Math.abs(entry.amount));
@@ -111,16 +157,16 @@ function DashboardPage() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
-  }, [entries, filters]);
+  }, [scoped, filters, bucket]);
 
   const byAccount = useMemo(() => {
     const map = new Map<string, number>();
-    for (const entry of entries.filter((e) => matches(e, filters, "account"))) {
+    for (const entry of scoped.filter((e) => matches(e, filters, bucket, "account"))) {
       const key = entry.account || "Sans compte";
       map.set(key, (map.get(key) ?? 0) + (isIncome(entry) ? Math.abs(entry.amount) : -Math.abs(entry.amount)));
     }
     return [...map.entries()].map(([name, solde]) => ({ name, solde }));
-  }, [entries, filters]);
+  }, [scoped, filters, bucket]);
 
   const activeFilters = Object.entries(filters).filter(([, value]) => value) as Array<
     [FilterKey, string]
@@ -132,14 +178,51 @@ function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Cliquez sur un mois, une catégorie ou un compte pour croiser les filtres.
+            Cliquez sur une période, une catégorie ou un compte pour croiser les filtres.
           </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="grid gap-1">
+            <Label htmlFor="from" className="text-xs text-muted-foreground">
+              Date de début
+            </Label>
+            <Input
+              id="from"
+              type="date"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+              className="w-40"
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label htmlFor="to" className="text-xs text-muted-foreground">
+              Date de fin
+            </Label>
+            <Input
+              id="to"
+              type="date"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+              className="w-40"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const range = currentMonthRange();
+              setFrom(range.from);
+              setTo(range.to);
+            }}
+          >
+            Mois en cours
+          </Button>
         </div>
         {activeFilters.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             {activeFilters.map(([key, value]) => (
               <Badge key={key} variant="secondary" className="gap-1">
-                {key === "month" ? formatMonth(value) : value}
+                {key === "month" ? formatPeriod(value) : value}
                 <button type="button" onClick={() => toggle(key, value)} aria-label="Retirer le filtre">
                   <X className="size-3" />
                 </button>
@@ -176,8 +259,10 @@ function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recettes / dépenses par mois</CardTitle>
-            <CardDescription>Cliquez une barre pour filtrer sur le mois</CardDescription>
+            <CardTitle className="text-base">
+              Recettes / dépenses {daily ? "par jour" : "par mois"}
+            </CardTitle>
+            <CardDescription>Cliquez une barre pour filtrer sur la période</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -222,7 +307,7 @@ function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Solde mensuel</CardTitle>
+            <CardTitle className="text-base">Solde {daily ? "journalier" : "mensuel"}</CardTitle>
             <CardDescription>Évolution recettes moins dépenses</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
