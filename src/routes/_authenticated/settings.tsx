@@ -312,27 +312,6 @@ function SyncSection() {
         </CardContent>
       </Card>
 
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle className="text-base">Et une vraie synchronisation bidirectionnelle ?</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            Aujourd'hui la MAJ est unidirectionnelle : N8N est la source, l'app est le miroir. Les lignes
-            supprimées dans N8N ne sont pas supprimées ici, par sécurité.
-          </p>
-          <p>
-            Passer en bidirectionnel implique : un identifiant stable partagé des deux côtés, un horodatage
-            de modification pour arbitrer les conflits (last-write-wins ou revue manuelle), un journal des
-            suppressions (tombstones) pour distinguer « supprimé » de « jamais reçu », un webhook d'écriture
-            côté N8N et une file de renvoi en cas d'échec réseau.
-          </p>
-          <p>
-            La structure actuelle est déjà prête : chaque ligne conserve sa clé source et un marqueur
-            « modifiée localement », ce qui permettra de ne renvoyer que les écarts.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
