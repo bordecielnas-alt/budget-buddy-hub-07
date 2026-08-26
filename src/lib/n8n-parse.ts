@@ -164,8 +164,13 @@ export function parsePayload(text: string, contentType: string): RawRow[] {
   return parseCsv(trimmed);
 }
 
+export const CSV_HEADER =
+  "id,Type,Date,Payee,Amount,Account,Description,Category,createdAt,updatedAt";
+
 export function toCsv(
   rows: Array<{
+    id?: string;
+    source_key?: string | null;
     entry_type: string;
     entry_date: string;
     payee: string;
@@ -173,13 +178,15 @@ export function toCsv(
     account: string;
     description: string;
     category: string;
+    created_at?: string;
+    updated_at?: string;
   }>,
 ): string {
   const escape = (value: string) =>
     /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-  const header = "Type,Date,Payee,Amount,Account,Description,Category";
   const lines = rows.map((row) =>
     [
+      escape(row.source_key ?? row.id ?? ""),
       escape(row.entry_type),
       row.entry_date,
       escape(row.payee),
@@ -187,7 +194,9 @@ export function toCsv(
       escape(row.account),
       escape(row.description),
       escape(row.category),
+      row.created_at ?? "",
+      row.updated_at ?? "",
     ].join(","),
   );
-  return [header, ...lines].join("\n");
+  return [CSV_HEADER, ...lines].join("\n");
 }
