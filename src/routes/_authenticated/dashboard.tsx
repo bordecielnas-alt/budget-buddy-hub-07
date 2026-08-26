@@ -136,10 +136,10 @@ function DashboardPage() {
     const map = new Map<string, { month: string; recettes: number; depenses: number }>();
     for (const entry of scoped.filter((e) => matches(e, filters, bucket, "month"))) {
       const key = bucket(entry.entry_date);
-      const bucket = map.get(key) ?? { month: key, recettes: 0, depenses: 0 };
-      if (isIncome(entry)) bucket.recettes += Math.abs(entry.amount);
-      else bucket.depenses += Math.abs(entry.amount);
-      map.set(key, bucket);
+      const slot = map.get(key) ?? { month: key, recettes: 0, depenses: 0 };
+      if (isIncome(entry)) slot.recettes += Math.abs(entry.amount);
+      else slot.depenses += Math.abs(entry.amount);
+      map.set(key, slot);
     }
     return [...map.values()]
       .sort((a, b) => a.month.localeCompare(b.month))
