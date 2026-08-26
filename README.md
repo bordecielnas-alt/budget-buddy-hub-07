@@ -54,7 +54,34 @@ cp .env.example .env   # renseignez les variables
 docker compose up -d --build
 ```
 
-L'application écoute sur `http://localhost:3000`.
+L'application écoute sur le port **3000** dans le conteneur, publié sur `http://localhost:3000`
+(modifiable via `ports: - "8080:3000"` dans `docker-compose.yml`).
+
+### Données persistantes
+
+Le dossier `./data` de la machine hôte est monté dans le conteneur sur `/data` (variable `DATA_DIR`).
+Il contient les données persistantes (exports CSV, sauvegardes) et survit à `docker compose down`,
+aux rebuilds et aux mises à jour d'image.
+
+```bash
+mkdir -p ./data
+sudo chown -R 1000:1000 ./data   # l'app tourne avec un utilisateur non root
+docker compose up -d --build
+```
+
+Sauvegarde : `tar czf backup-$(date +%F).tar.gz ./data`.
+Les écritures budgétaires elles-mêmes sont stockées dans la base Postgres du backend, référencée par
+`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` : pour un auto-hébergement complet, pointez ces variables
+vers votre instance Postgres/Supabase self-host dont le volume de données doit également être monté
+(ex. `./data/postgres:/var/lib/postgresql/data`).
+
+### Table synchronisée
+
+La table source expose exactement les entêtes :
+`id,Type,Date,Payee,Amount,Account,Description,Category,createdAt,updatedAt`.
+La colonne **`id` est obligatoire** : c'est la clé de rapprochement. À chaque MAJ, une ligne dont l'`id`
+existe déjà est mise à jour (jamais dupliquée), une ligne inconnue est ajoutée, une ligne sans `id`
+est ignorée et comptée dans « ignorées ». L'export CSV reprend les mêmes entêtes.
 
 Variables nécessaires :
 
