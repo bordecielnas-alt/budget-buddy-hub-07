@@ -49,27 +49,54 @@ Une vraie synchronisation bidirectionnelle impliquerait :
 
 ## Auto-hébergement (Docker)
 
-```bash
-cp .env.example .env   # renseignez les variables
-docker compose up -d --build
-```
-
-L'application écoute sur le port **3000** dans le conteneur, publié sur `http://localhost:3000`
-(modifiable via `ports: - "8080:3000"` dans `docker-compose.yml`).
-
-### Données persistantes
-
-Le dossier `./data` de la machine hôte est monté dans le conteneur sur `/data` (variable `DATA_DIR`).
-Il contient les données persistantes (exports CSV, sauvegardes) et survit à `docker compose down`,
-aux rebuilds et aux mises à jour d'image.
+### Premier démarrage
 
 ```bash
 mkdir -p ./data
-sudo chown -R 1000:1000 ./data   # l'app tourne avec un utilisateur non root
+sudo chown -R 1000:1000 ./data   # l'app tourne avec l'utilisateur non root `node`
 docker compose up -d --build
 ```
 
+Au premier lancement, le conteneur **initialise lui-même** `./data` :
+
+```text
+data/
+├── config/database.env   # paramètres backend (généré, à renseigner)
+├── exports/              # exports CSV
+├── backups/              # sauvegardes
+└── cache/
+```
+
+Si `./data/config/database.env` est vide, le conteneur s'arrête avec un message
+explicite listant les variables manquantes (`docker compose logs app`).
+Renseignez-les puis relancez :
+
+```bash
+# ./data/config/database.env
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
+```
+
+```bash
+docker compose restart app
+```
+
+Les variables passées via `.env` / `docker compose` ont priorité sur le fichier
+persistant : les deux méthodes fonctionnent.
+
+### Port
+
+L'application écoute sur le port **3000** dans le conteneur, publié sur
+`http://localhost:3000` (modifiable via `ports: - "8080:3000"` dans `docker-compose.yml`).
+
+### Données persistantes
+
+`./data` (hôte) est monté sur `/data` (`DATA_DIR`) et survit à `docker compose down`,
+aux rebuilds et aux mises à jour d'image.
+
 Sauvegarde : `tar czf backup-$(date +%F).tar.gz ./data`.
+
 Les écritures budgétaires elles-mêmes sont stockées dans la base Postgres du backend, référencée par
 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` : pour un auto-hébergement complet, pointez ces variables
 vers votre instance Postgres/Supabase self-host dont le volume de données doit également être monté
