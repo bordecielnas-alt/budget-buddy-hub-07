@@ -88,7 +88,20 @@ export const syncFromN8n = createServerFn({ method: "POST" })
       .not("source_key", "is", null);
     if (readError) throw new Error(readError.message);
 
-    const byKey = new Map((existing ?? []).map((row) => [row.source_key as string, row]));
+    type ExistingRow = {
+      id: string;
+      source_key: string | null;
+      entry_type: string;
+      entry_date: string;
+      payee: string;
+      amount: number;
+      account: string;
+      description: string;
+      category: string;
+    };
+    const byKey = new Map(
+      ((existing ?? []) as unknown as ExistingRow[]).map((row) => [row.source_key as string, row]),
+    );
 
     type EntryInsert = NormalizedRow & {
       user_id: string;
@@ -191,7 +204,11 @@ export const importRows = createServerFn({ method: "POST" })
       .eq("user_id", context.userId)
       .not("source_key", "is", null);
     if (readError) throw new Error(readError.message);
-    const byKey = new Map((existing ?? []).map((row) => [row.source_key as string, row.id as string]));
+    const byKey = new Map(
+      ((existing ?? []) as unknown as Array<{ id: string; source_key: string | null }>).map(
+        (row) => [row.source_key as string, row.id],
+      ),
+    );
 
     let added = 0;
     let updated = 0;
