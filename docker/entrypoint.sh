@@ -4,9 +4,27 @@ set -e
 DATA_DIR="${DATA_DIR:-/data}"
 CONFIG_DIR="$DATA_DIR/config"
 CONFIG_FILE="$CONFIG_DIR/database.env"
+APP_UID="${APP_UID:-1000}"
+APP_GID="${APP_GID:-1000}"
+
+# --- 0. Droits du volume monté (nécessite root au démarrage) ------------------
+if [ "$(id -u)" = "0" ]; then
+  mkdir -p "$DATA_DIR"
+  chown -R "$APP_UID:$APP_GID" "$DATA_DIR" 2>/dev/null || \
+    echo "[init] Avertissement : impossible de corriger les droits de $DATA_DIR"
+  # on relance ce script sans privilèges
+  exec su-exec "$APP_UID:$APP_GID" "$0" "$@"
+fi
 
 # --- 1. Initialisation de l'arborescence persistante -------------------------
-mkdir -p "$CONFIG_DIR" "$DATA_DIR/exports" "$DATA_DIR/backups" "$DATA_DIR/cache"
+if ! mkdir -p "$CONFIG_DIR" "$DATA_DIR/exports" "$DATA_DIR/backups" "$DATA_DIR/cache"; then
+  echo "----------------------------------------------------------------"
+  echo "[erreur] Écriture impossible dans $DATA_DIR (droits du volume hôte)."
+  echo "Sur l'hôte : sudo chown -R $APP_UID:$APP_GID ./data"
+  echo "----------------------------------------------------------------"
+  exit 1
+fi
+
 
 # --- 2. Fichier de configuration base de données (créé au premier démarrage) --
 if [ ! -f "$CONFIG_FILE" ]; then

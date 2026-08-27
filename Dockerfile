@@ -20,8 +20,11 @@ ENV PORT=3000
 ENV DATA_DIR=/data
 COPY --from=build /app/.output ./.output
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /data && chown -R node:node /data
-USER node
+RUN apk add --no-cache su-exec \
+ && chmod +x /usr/local/bin/entrypoint.sh \
+ && mkdir -p /data && chown -R node:node /data
+# On démarre en root pour pouvoir corriger les droits du volume monté,
+# puis l'entrypoint abandonne les privilèges vers l'utilisateur `node`.
 EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["node", ".output/server/index.mjs"]
