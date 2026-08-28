@@ -181,7 +181,7 @@ export async function getState(): Promise<AppState> {
         ...(await freshState()),
         ...parsed,
         settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
-        secrets: { n8n_token: "", ...(parsed.secrets ?? {}) },
+        secrets: { n8n_token: parsed.secrets?.n8n_token ?? "" },
         entries: parsed.entries ?? [],
         syncRuns: parsed.syncRuns ?? [],
       };
