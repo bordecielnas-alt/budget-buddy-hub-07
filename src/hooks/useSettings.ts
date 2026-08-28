@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect } from "react";
 
-import { supabase } from "@/integrations/supabase/client";
+import { getSettings, saveSettings } from "@/lib/data.functions";
 import type { UserSettings } from "@/lib/budget-types";
 import { applyTheme, DEFAULT_THEME } from "@/lib/themes";
 
 const FALLBACK: UserSettings = {
-  user_id: "",
   theme: DEFAULT_THEME,
   density: "comfortable",
   currency: "EUR",
@@ -18,20 +18,14 @@ const FALLBACK: UserSettings = {
 
 export function useSettings() {
   const queryClient = useQueryClient();
+  const fetchSettings = useServerFn(getSettings);
+  const persistSettings = useServerFn(saveSettings);
 
   const query = useQuery({
     queryKey: ["user-settings"],
     queryFn: async (): Promise<UserSettings> => {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
-      if (!userId) return FALLBACK;
-      const { data, error } = await supabase
-        .from("user_settings")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (error) throw error;
-      return (data as UserSettings | null) ?? { ...FALLBACK, user_id: userId };
+      const data = await fetchSettings();
+      return { ...FALLBACK, ...data };
     },
   });
 
@@ -49,14 +43,7 @@ export function useSettings() {
 
   const update = useMutation({
     mutationFn: async (patch: Partial<UserSettings>) => {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
-      if (!userId) throw new Error("Non connecté");
-      const { error } = await supabase
-        .from("user_settings")
-        .update(patch)
-        .eq("user_id", userId);
-      if (error) throw error;
+      await persistSettings({ data: patch });
     },
     onMutate: async (patch) => {
       queryClient.setQueryData<UserSettings>(["user-settings"], (current) => ({

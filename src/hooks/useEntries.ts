@@ -1,68 +1,55 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 
-import { supabase } from "@/integrations/supabase/client";
 import type { BudgetEntry } from "@/lib/budget-types";
+import { createEntry, deleteEntry, listEntries, updateEntry } from "@/lib/data.functions";
 
 export function useEntries() {
+  const fetchEntries = useServerFn(listEntries);
   return useQuery({
     queryKey: ["budget-entries"],
     queryFn: async (): Promise<BudgetEntry[]> => {
-      const { data, error } = await supabase
-        .from("budget_entries")
-        .select("*")
-        .order("entry_date", { ascending: false })
-        .limit(5000);
-      if (error) throw error;
-      return (data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })) as BudgetEntry[];
+      const rows = await fetchEntries();
+      return rows.map((row) => ({ ...row, amount: Number(row.amount) })) as BudgetEntry[];
     },
   });
 }
 
 export function useEntryMutations() {
   const queryClient = useQueryClient();
+  const runCreate = useServerFn(createEntry);
+  const runUpdate = useServerFn(updateEntry);
+  const runDelete = useServerFn(deleteEntry);
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["budget-entries"] });
   };
 
-  const updateEntry = useMutation({
+  const updateEntryMutation = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<BudgetEntry> }) => {
-      const { error } = await supabase
-        .from("budget_entries")
-        .update({ ...patch, locally_modified: true })
-        .eq("id", id);
-      if (error) throw error;
+      await runUpdate({ data: { id, patch } });
     },
     onSuccess: invalidate,
   });
 
-  const createEntry = useMutation({
+  const createEntryMutation = useMutation({
     mutationFn: async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
-      if (!userId) throw new Error("Non connecté");
-      const { error } = await supabase.from("budget_entries").insert({
-        user_id: userId,
-        entry_type: "Dépenses",
-        entry_date: new Date().toISOString().slice(0, 10),
-        payee: "",
-        amount: 0,
-        account: "",
-        description: "",
-        category: "",
-        source: "manual",
-      });
-      if (error) throw error;
+      await runCreate();
     },
     onSuccess: invalidate,
   });
 
-  const deleteEntry = useMutation({
+  const deleteEntryMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("budget_entries").delete().eq("id", id);
-      if (error) throw error;
+      await runDelete({ data: { id } });
     },
     onSuccess: invalidate,
   });
 
-  return { updateEntry, createEntry, deleteEntry, invalidate };
+  return {
+    updateEntry: updateEntryMutation,
+    createEntry: createEntryMutation,
+    deleteEntry: deleteEntryMutation,
+    invalidate,
+  };
 }

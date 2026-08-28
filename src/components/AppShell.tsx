@@ -3,7 +3,9 @@ import { LayoutDashboard, Settings, Table2, Wallet, LogOut } from "lucide-react"
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+
+import { logout } from "@/lib/auth.functions";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -14,8 +16,10 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
+  const runLogout = useServerFn(logout);
+
   async function signOut() {
-    await supabase.auth.signOut();
+    await runLogout();
     toast.success("Déconnecté");
     await router.navigate({ to: "/auth" });
   }

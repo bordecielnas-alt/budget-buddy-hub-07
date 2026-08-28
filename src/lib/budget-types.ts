@@ -1,6 +1,5 @@
 export type BudgetEntry = {
   id: string;
-  user_id: string;
   entry_type: string;
   entry_date: string;
   payee: string;
@@ -16,7 +15,6 @@ export type BudgetEntry = {
 };
 
 export type UserSettings = {
-  user_id: string;
   theme: string;
   density: string;
   currency: string;
