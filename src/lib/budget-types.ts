@@ -1,6 +1,5 @@
 export type BudgetEntry = {
   id: string;
-  user_id: string;
   entry_type: string;
   entry_date: string;
   payee: string;
