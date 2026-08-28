@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/integrations/supabase/client";
+import { changePassword, getAuthState } from "@/lib/auth.functions";
 import { useSettings } from "@/hooks/useSettings";
 import { THEMES } from "@/lib/themes";
 import { getN8nConfig, saveN8nConfig, syncFromN8n, testN8nConnection } from "@/lib/n8n.functions";
@@ -72,22 +72,28 @@ function SettingsPage() {
 }
 
 function AccountSection() {
+  const loadAuth = useServerFn(getAuthState);
+  const runChange = useServerFn(changePassword);
   const [email, setEmail] = useState("");
+  const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
-  }, []);
+    void loadAuth()
+      .then((state) => setEmail(state.email))
+      .catch(() => undefined);
+  }, [loadAuth]);
 
-  async function changePassword(event: React.FormEvent) {
+  async function submitPassword(event: React.FormEvent) {
     event.preventDefault();
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await runChange({ data: { current, next: password } });
+      setCurrent("");
+      setPassword("");
+      toast.success("Mot de passe mis à jour");
+    } catch (error) {
+      toast.error((error as Error).message || "Modification impossible");
     }
-    setPassword("");
-    toast.success("Mot de passe mis à jour");
   }
 
   return (
@@ -98,11 +104,22 @@ function AccountSection() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label>Email</Label>
+          <Label>Compte</Label>
           <Input value={email} readOnly />
         </div>
         <Separator />
-        <form className="space-y-3" onSubmit={changePassword}>
+        <form className="space-y-3" onSubmit={submitPassword}>
+          <div className="space-y-2">
+            <Label htmlFor="current-password">Mot de passe actuel</Label>
+            <Input
+              id="current-password"
+              type="password"
+              autoComplete="current-password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              required
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="new-password">Nouveau mot de passe</Label>
             <Input
