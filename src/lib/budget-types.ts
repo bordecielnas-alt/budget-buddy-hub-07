@@ -15,7 +15,6 @@ export type BudgetEntry = {
 };
 
 export type UserSettings = {
-  user_id: string;
   theme: string;
   density: string;
   currency: string;
