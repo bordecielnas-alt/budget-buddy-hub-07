@@ -6,11 +6,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
-RUN --mount=type=secret,id=vite_supabase_url,required=false \
-    --mount=type=secret,id=vite_supabase_publishable_key,required=false \
-    VITE_SUPABASE_URL="$(cat /run/secrets/vite_supabase_url 2>/dev/null || printf 'https://example.invalid')" \
-    VITE_SUPABASE_PUBLISHABLE_KEY="$(cat /run/secrets/vite_supabase_publishable_key 2>/dev/null || printf 'sb_publishable_local_build')" \
-    bun run build
+RUN bun run build
 
 # --- Runtime ---
 FROM node:22-alpine AS runtime
