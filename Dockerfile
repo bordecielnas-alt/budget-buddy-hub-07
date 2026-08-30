@@ -6,7 +6,10 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
-RUN bun run build
+# Cible Node autonome (serveur HTTP qui écoute sur $PORT), pas Cloudflare.
+ENV NITRO_PRESET=node-server
+RUN bun run build \
+ && test -f .output/server/index.mjs
 
 # --- Runtime ---
 FROM node:22-alpine AS runtime
