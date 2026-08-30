@@ -53,4 +53,12 @@ while IFS='=' read -r key value; do
 done < "$CONFIG_FILE"
 
 echo "[init] DATA_DIR=$DATA_DIR | stockage local : $DATA_DIR/budget.db"
+
+if [ ! -f "/app/.output/server/index.mjs" ]; then
+  echo "[erreur] Build serveur absente (/app/.output/server/index.mjs)."
+  echo "Reconstruisez l'image : docker compose build --no-cache && docker compose up -d"
+  exit 1
+fi
+
+echo "[init] Demarrage du serveur sur le port ${PORT:-3000}"
 exec "$@"
