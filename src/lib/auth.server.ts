@@ -32,8 +32,22 @@ export async function requireAdmin(): Promise<void> {
 
 export async function verifyPassword(password: string): Promise<boolean> {
   const state = await getState();
-  const hash = await hashPassword(password, state.admin.salt);
-  return hash === state.admin.hash;
+  if ((await hashPassword(password, state.admin.salt)) === state.admin.hash) return true;
+
+  // Compatibilité : les comptes créés avant le passage à 100 000 itérations
+  // stockent un hash à 120 000 itérations. On le valide puis on le remplace.
+  try {
+    const legacy = await hashPassword(password, state.admin.salt, 120_000);
+    if (legacy === state.admin.hash) {
+      await mutate(async (s) => {
+        s.admin.hash = await hashPassword(password, s.admin.salt);
+      });
+      return true;
+    }
+  } catch {
+    // runtime qui refuse 120 000 itérations : pas de repli possible
+  }
+  return false;
 }
 
 export async function signIn(password: string): Promise<boolean> {

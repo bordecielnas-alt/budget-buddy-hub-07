@@ -69,7 +69,11 @@ function randomHex(bytes: number): string {
   return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function hashPassword(password: string, salt: string): Promise<string> {
+export async function hashPassword(
+  password: string,
+  salt: string,
+  iterations = 100_000,
+): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(password),
@@ -82,7 +86,7 @@ export async function hashPassword(password: string, salt: string): Promise<stri
       name: "PBKDF2",
       salt: new TextEncoder().encode(salt),
       // Le runtime edge plafonne PBKDF2 à 100 000 itérations.
-      iterations: 100_000,
+      iterations,
       hash: "SHA-256",
     },
     key,
