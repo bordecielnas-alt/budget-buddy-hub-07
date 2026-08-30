@@ -81,7 +81,8 @@ export async function hashPassword(password: string, salt: string): Promise<stri
     {
       name: "PBKDF2",
       salt: new TextEncoder().encode(salt),
-      iterations: 120_000,
+      // Le runtime edge plafonne PBKDF2 à 100 000 itérations.
+      iterations: 100_000,
       hash: "SHA-256",
     },
     key,
