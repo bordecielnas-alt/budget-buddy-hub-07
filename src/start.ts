@@ -1,7 +1,6 @@
-import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
-
-//import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
+import { createStart, createMiddleware } from "@tanstack/react-start";
 import { renderErrorPage } from "./lib/error-page";
+
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -18,13 +17,12 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
-// Start installs this automatically wheddn src/start.ts is absent; defining the
-// file opts out, so re-add it explicitly to keep sertions protected
-// from cross-site requests.
-const csrfMiddleware = createCsrfMiddleware({
-  filter: (ctx) => ctx.handlerType === "serverFn",
-});
-
+//
+// SQLite-backed cookie session (see src/lib/auth.server.ts). Supabase n'est
+// pas utilisé par cette app — on n'enregistre donc PAS attachSupabaseAuth,
+// sinon son appel à supabase.auth.getSession() plante côté client en Docker
+// quand les VITE_SUPABASE_* ne sont pas définis, ce qui casse toutes les
+// serverFn (signIn, me, signOut, …).
 export const startInstance = createStart(() => ({
-  requestMiddleware: [errorMiddleware, csrfMiddleware],
+  requestMiddleware: [errorMiddleware],
 }));
