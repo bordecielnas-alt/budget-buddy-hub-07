@@ -56,9 +56,6 @@ jobs:
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          secrets: |
-            vite_supabase_url=${{ secrets.VITE_SUPABASE_URL || 'https://example.invalid' }}
-            vite_supabase_publishable_key=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_ci_build' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

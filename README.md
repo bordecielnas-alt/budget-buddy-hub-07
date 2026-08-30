@@ -61,29 +61,16 @@ Au premier lancement, le conteneur **initialise lui-même** `./data` :
 
 ```text
 data/
-├── config/database.env   # paramètres backend (généré, à renseigner)
+├── budget.db             # base locale (SQLite)
+├── config/database.env   # réglages optionnels (généré)
 ├── exports/              # exports CSV
 ├── backups/              # sauvegardes
 └── cache/
 ```
 
-Si `./data/config/database.env` est vide, le conteneur s'arrête avec un message
-explicite listant les variables manquantes (`docker compose logs app`).
-Renseignez-les puis relancez :
-
-```bash
-# ./data/config/database.env
-SUPABASE_URL=https://xxxx.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
-```
-
-```bash
-docker compose restart app
-```
-
-Les variables passées via `.env` / `docker compose` ont priorité sur le fichier
-persistant : les deux méthodes fonctionnent.
+Aucune base de données externe n'est requise : les écritures, les réglages, le compte admin
+et l'historique de synchronisation sont stockés dans `./data/budget.db` (SQLite, repli JSON
+`budget.json` si le runtime ne fournit pas SQLite).
 
 ### Port
 
@@ -97,10 +84,7 @@ aux rebuilds et aux mises à jour d'image.
 
 Sauvegarde : `tar czf backup-$(date +%F).tar.gz ./data`.
 
-Les écritures budgétaires elles-mêmes sont stockées dans la base Postgres du backend, référencée par
-`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` : pour un auto-hébergement complet, pointez ces variables
-vers votre instance Postgres/Supabase self-host dont le volume de données doit également être monté
-(ex. `./data/postgres:/var/lib/postgresql/data`).
+Tout est dans `./data` : base locale, config, exports, sauvegardes. Rien d'externe à provisionner.
 
 ### Table synchronisée
 
@@ -110,16 +94,7 @@ La colonne **`id` est obligatoire** : c'est la clé de rapprochement. À chaque 
 existe déjà est mise à jour (jamais dupliquée), une ligne inconnue est ajoutée, une ligne sans `id`
 est ignorée et comptée dans « ignorées ». L'export CSV reprend les mêmes entêtes.
 
-Variables nécessaires :
-
-| Variable | Usage |
-| --- | --- |
-| `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` | client navigateur, passés au build Docker comme secrets BuildKit |
-| `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | accès serveur |
-| `SUPABASE_SERVICE_ROLE_KEY` | opérations privilégiées (jetons, bootstrap admin) |
-
-Les données (comptes, écritures, réglages, historique de synchro) sont persistées en
-base Postgres : redémarrer le conteneur ne perd rien.
+Aucune variable backend n'est nécessaire. Seules `PORT` et `DATA_DIR` sont optionnelles.
 
 ## Build automatique GitHub Actions
 
@@ -136,14 +111,7 @@ ghcr.io/<utilisateur>/<dépôt>:commit-<sha>
 
 ### Secrets à configurer dans le dépôt
 
-Dans **Settings → Secrets and variables → Actions → Repository secrets**, ajoutez :
-
-| Secret | Description |
-| --- | --- |
-| `VITE_SUPABASE_URL` | URL Supabase/Lovable Cloud pour le build client |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Clé publique Supabase pour le build client |
-
-> La clé publishable est injectée via un secret BuildKit, elle ne reste pas dans les couches de l'image.
+Aucun : le build ne dépend d'aucune clé externe.
 
 ### Permissions du workflow
 
@@ -155,7 +123,11 @@ Le workflow demande `packages: write` pour pousser sur `ghcr.io`. Si le push éc
 docker pull ghcr.io/<utilisateur>/<dépôt>:latest
 ```
 
-Puis lancez-la avec les variables serveur nécessaires (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+Puis lancez-la en montant simplement le volume de données :
+
+```bash
+docker run -d -p 3000:3000 -v "$PWD/data:/data" ghcr.io/<utilisateur>/<dépôt>:latest
+```
 
 ## Développement
 
