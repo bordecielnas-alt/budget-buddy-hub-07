@@ -52,7 +52,7 @@ function AuthPage() {
     event.preventDefault();
     setBusy(true);
     try {
-      await signIn({ data: { password } });
+      await signIn({ data: { password, login: email || undefined } });
       await router.navigate({ to: "/dashboard" });
     } catch (error) {
       toast.error((error as Error).message || "Connexion impossible");
