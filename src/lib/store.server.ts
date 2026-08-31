@@ -111,7 +111,7 @@ type Driver = {
   write: (value: string) => Promise<void>;
 };
 
-function dataDir(): string {
+export function dataDir(): string {
   return process.env["DATA_DIR"] || "./data";
 }
 
