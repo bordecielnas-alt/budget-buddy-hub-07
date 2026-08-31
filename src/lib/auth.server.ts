@@ -67,3 +67,9 @@ export async function updatePassword(next: string): Promise<void> {
     state.admin.hash = await hashPassword(next, state.admin.salt);
   });
 }
+
+export async function updateEmail(next: string): Promise<void> {
+  await mutate((state) => {
+    state.admin.email = next;
+  });
+}

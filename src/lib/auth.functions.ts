@@ -41,3 +41,20 @@ export const changePassword = createServerFn({ method: "POST" })
     await updatePassword(data.next);
     return { ok: true as const };
   });
+
+export const changeLogin = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z
+      .object({
+        login: z.string().trim().min(3).max(200),
+        current: z.string().min(1).max(200),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { requireAdmin, verifyPassword, updateEmail } = await import("@/lib/auth.server");
+    await requireAdmin();
+    if (!(await verifyPassword(data.current))) throw new Error("Mot de passe incorrect");
+    await updateEmail(data.login);
+    return { login: data.login };
+  });

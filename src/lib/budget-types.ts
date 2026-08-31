@@ -22,6 +22,10 @@ export type UserSettings = {
   n8n_url: string;
   n8n_header_name: string;
   n8n_last_sync: string | null;
+  backup_enabled: boolean;
+  backup_interval_hours: number;
+  backup_keep: number;
+  backup_last: string | null;
 };
 
 export type SyncRun = {
@@ -40,9 +44,11 @@ export type SyncReport = {
   updated: number;
   unchanged: number;
   skipped: number;
+  protected: number;
   total: number;
   message: string;
 };
+
 
 export const ENTRY_TYPES = ["Dépenses", "Recettes", "Transfert", "Épargne"] as const;
 
