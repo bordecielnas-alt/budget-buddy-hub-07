@@ -72,6 +72,7 @@ export const syncFromN8n = createServerFn({ method: "POST" })
       let added = 0;
       let updated = 0;
       let unchanged = 0;
+      let protectedRows = 0;
       const now = new Date().toISOString();
 
       for (const row of rows) {
@@ -88,6 +89,11 @@ export const syncFromN8n = createServerFn({ method: "POST" })
               updated_at: now,
             });
           }
+          continue;
+        }
+        // Une ligne éditée dans l'app est figée : la MAJ ne l'écrase jamais (clé = id).
+        if (current.locally_modified) {
+          protectedRows += 1;
           continue;
         }
         const differs =
@@ -117,11 +123,13 @@ export const syncFromN8n = createServerFn({ method: "POST" })
         updated,
         unchanged,
         skipped,
+        protected: protectedRows,
         total: rows.length,
         message: data.preview
-          ? "Aperçu : aucune écriture appliquée."
-          : `${added} ajout(s), ${updated} mise(s) à jour par id, ${unchanged} inchangée(s), ${skipped} ignorée(s).`,
+          ? `Aperçu : ${added} ajout(s), ${updated} mise(s) à jour, ${protectedRows} ligne(s) protégée(s) — rien appliqué.`
+          : `${added} ajout(s), ${updated} mise(s) à jour par id, ${unchanged} inchangée(s), ${protectedRows} protégée(s), ${skipped} ignorée(s).`,
       };
+
 
       if (!data.preview) {
         state.settings.n8n_last_sync = now;
