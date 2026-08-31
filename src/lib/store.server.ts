@@ -27,7 +27,12 @@ export type StoredSettings = {
   n8n_url: string;
   n8n_header_name: string;
   n8n_last_sync: string | null;
+  backup_enabled: boolean;
+  backup_interval_hours: number;
+  backup_keep: number;
+  backup_last: string | null;
 };
+
 
 export type SyncRun = {
   id: string;
@@ -61,7 +66,12 @@ export const DEFAULT_SETTINGS: StoredSettings = {
   n8n_url: "",
   n8n_header_name: "x-api-key",
   n8n_last_sync: null,
+  backup_enabled: true,
+  backup_interval_hours: 24,
+  backup_keep: 30,
+  backup_last: null,
 };
+
 
 function randomHex(bytes: number): string {
   const buf = new Uint8Array(bytes);
@@ -101,7 +111,7 @@ type Driver = {
   write: (value: string) => Promise<void>;
 };
 
-function dataDir(): string {
+export function dataDir(): string {
   return process.env["DATA_DIR"] || "./data";
 }
 

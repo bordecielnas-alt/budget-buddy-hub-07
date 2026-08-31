@@ -36,14 +36,13 @@ function AuthPage() {
   const router = useRouter();
   const checkAuth = useServerFn(getAuthState);
   const signIn = useServerFn(login);
-  const [email, setEmail] = useState("admin@budget.local");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void checkAuth()
       .then((state) => {
-        setEmail(state.email);
         if (state.authenticated) void router.navigate({ to: "/dashboard" });
       })
       .catch(() => undefined);
@@ -53,7 +52,7 @@ function AuthPage() {
     event.preventDefault();
     setBusy(true);
     try {
-      await signIn({ data: { password } });
+      await signIn({ data: { password, login: email || undefined } });
       await router.navigate({ to: "/dashboard" });
     } catch (error) {
       toast.error((error as Error).message || "Connexion impossible");
@@ -75,8 +74,13 @@ function AuthPage() {
         <CardContent>
           <form className="space-y-4" onSubmit={submit}>
             <div className="space-y-2">
-              <Label htmlFor="email">Compte</Label>
-              <Input id="email" value={email} readOnly autoComplete="username" />
+              <Label htmlFor="email">Identifiant</Label>
+              <Input
+                id="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Mot de passe</Label>
@@ -92,12 +96,10 @@ function AuthPage() {
             <Button type="submit" className="w-full" disabled={busy}>
               Se connecter
             </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              Mot de passe initial : <code>@Tracking@</code> — modifiable dans Réglages → Compte.
-            </p>
           </form>
         </CardContent>
       </Card>
     </div>
   );
 }
+
