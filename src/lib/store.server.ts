@@ -27,7 +27,12 @@ export type StoredSettings = {
   n8n_url: string;
   n8n_header_name: string;
   n8n_last_sync: string | null;
+  backup_enabled: boolean;
+  backup_interval_hours: number;
+  backup_keep: number;
+  backup_last: string | null;
 };
+
 
 export type SyncRun = {
   id: string;
