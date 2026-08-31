@@ -173,6 +173,7 @@ export const importRows = createServerFn({ method: "POST" })
         updated: 0,
         unchanged: 0,
         skipped,
+        protected: 0,
         total: 0,
         message: "Aucune ligne exploitable (la colonne id est obligatoire).",
       };
@@ -186,9 +187,16 @@ export const importRows = createServerFn({ method: "POST" })
       let added = 0;
       let updated = 0;
 
+      let protectedRows = 0;
+
       for (const row of rows) {
         const current = byKey.get(row.source_key);
         if (current) {
+          // Ligne éditée localement : jamais écrasée par un import (clé = id).
+          if (current.locally_modified) {
+            protectedRows += 1;
+            continue;
+          }
           Object.assign(current, row, {
             source: "import",
             locally_modified: false,
@@ -213,8 +221,9 @@ export const importRows = createServerFn({ method: "POST" })
         updated,
         unchanged: 0,
         skipped,
+        protected: protectedRows,
         total: rows.length,
-        message: `${added} ajout(s), ${updated} mise(s) à jour par id, ${skipped} ignorée(s).`,
+        message: `${added} ajout(s), ${updated} mise(s) à jour par id, ${protectedRows} protégée(s), ${skipped} ignorée(s).`,
       };
     });
   });
