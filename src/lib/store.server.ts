@@ -66,7 +66,12 @@ export const DEFAULT_SETTINGS: StoredSettings = {
   n8n_url: "",
   n8n_header_name: "x-api-key",
   n8n_last_sync: null,
+  backup_enabled: true,
+  backup_interval_hours: 24,
+  backup_keep: 30,
+  backup_last: null,
 };
+
 
 function randomHex(bytes: number): string {
   const buf = new Uint8Array(bytes);
