@@ -74,15 +74,35 @@ function SettingsPage() {
 function AccountSection() {
   const loadAuth = useServerFn(getAuthState);
   const runChange = useServerFn(changePassword);
+  const runChangeLogin = useServerFn(changeLogin);
   const [email, setEmail] = useState("");
+  const [loginDraft, setLoginDraft] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
     void loadAuth()
-      .then((state) => setEmail(state.email))
+      .then((state) => {
+        setEmail(state.email);
+        setLoginDraft(state.email);
+      })
       .catch(() => undefined);
   }, [loadAuth]);
+
+  async function submitLogin(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      const result = await runChangeLogin({
+        data: { login: loginDraft, current: loginPassword },
+      });
+      setEmail(result.login);
+      setLoginPassword("");
+      toast.success("Identifiant mis à jour");
+    } catch (error) {
+      toast.error((error as Error).message || "Modification impossible");
+    }
+  }
 
   async function submitPassword(event: React.FormEvent) {
     event.preventDefault();
@@ -103,10 +123,33 @@ function AccountSection() {
         <CardDescription>Identifiants de connexion à l'application.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>Compte</Label>
-          <Input value={email} readOnly />
-        </div>
+        <form className="space-y-3" onSubmit={submitLogin}>
+          <div className="space-y-2">
+            <Label htmlFor="login">Identifiant</Label>
+            <Input
+              id="login"
+              value={loginDraft}
+              onChange={(e) => setLoginDraft(e.target.value)}
+              autoComplete="username"
+              required
+            />
+            <p className="text-xs text-muted-foreground">Actuel : {email || "—"}</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="login-password">Mot de passe (confirmation)</Label>
+            <Input
+              id="login-password"
+              type="password"
+              autoComplete="current-password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              required
+            />
+          </div>
+          <Button type="submit" variant="outline">
+            <User className="mr-2 size-4" /> Changer l'identifiant
+          </Button>
+        </form>
         <Separator />
         <form className="space-y-3" onSubmit={submitPassword}>
           <div className="space-y-2">
@@ -140,6 +183,7 @@ function AccountSection() {
     </Card>
   );
 }
+
 
 function AppearanceSection() {
   const { settings, update } = useSettings();
