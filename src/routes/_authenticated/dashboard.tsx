@@ -15,15 +15,31 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { X } from "lucide-react";
+import { Lock, LockOpen, X } from "lucide-react";
 
+import { SyncButton } from "@/components/SyncButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEntries } from "@/hooks/useEntries";
-import { formatMoney, formatMonth, isIncome, monthKey, type BudgetEntry } from "@/lib/budget-types";
+import { formatMoney, formatMonth, isIncome, type BudgetEntry } from "@/lib/budget-types";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -32,7 +48,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       {
         name: "description",
         content:
-          "Vue d'ensemble de vos recettes, dépenses et soldes mensuels avec filtrage croisé par catégorie, compte et mois.",
+          "Vue d'ensemble de vos recettes, dépenses et soldes avec granularité année, mois ou jour et filtrage croisé.",
       },
       { property: "og:title", content: "Dashboard budget — Budget Tracker" },
       {
@@ -44,8 +60,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: DashboardPage,
 });
 
-type FilterKey = "month" | "category" | "account" | "type";
+type FilterKey = "period" | "category" | "account" | "type";
 type Filters = Partial<Record<FilterKey, string>>;
+type Granularity = "year" | "month" | "day";
 
 const PALETTE = [
   "var(--chart-1)",
@@ -55,23 +72,19 @@ const PALETTE = [
   "var(--chart-5)",
 ];
 
-function currentMonthRange() {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return { from: iso(first), to: iso(last) };
+function currentYearRange() {
+  const year = new Date().getFullYear();
+  return { from: `${year}-01-01`, to: `${year}-12-31` };
 }
 
-function spanDays(from: string, to: string) {
-  const a = new Date(from).getTime();
-  const b = new Date(to).getTime();
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.round((b - a) / 86_400_000);
+function bucketOf(date: string, granularity: Granularity) {
+  if (granularity === "year") return date.slice(0, 4);
+  if (granularity === "month") return date.slice(0, 7);
+  return date.slice(0, 10);
 }
 
 function formatPeriod(key: string) {
+  if (key.length === 4) return key;
   if (key.length === 7) return formatMonth(key);
   const [y, m, d] = key.split("-");
   return `${d}/${m}/${y?.slice(2)}`;
@@ -80,11 +93,11 @@ function formatPeriod(key: string) {
 function matches(
   entry: BudgetEntry,
   filters: Filters,
-  bucket: (date: string) => string,
+  granularity: Granularity,
   ignore?: FilterKey,
 ) {
   const checks: Array<[FilterKey, string]> = [
-    ["month", bucket(entry.entry_date)],
+    ["period", bucketOf(entry.entry_date, granularity)],
     ["category", entry.category || "Sans catégorie"],
     ["account", entry.account || "Sans compte"],
     ["type", entry.entry_type],
@@ -99,27 +112,25 @@ function matches(
 function DashboardPage() {
   const { data: entries = [], isLoading } = useEntries();
   const [filters, setFilters] = useState<Filters>({});
-  const initialRange = useMemo(currentMonthRange, []);
+  const initialRange = useMemo(currentYearRange, []);
   const [from, setFrom] = useState(initialRange.from);
   const [to, setTo] = useState(initialRange.to);
-
-  const daily = spanDays(from, to) <= 70;
-  const bucket = useMemo(
-    () => (date: string) => (daily ? date.slice(0, 10) : monthKey(date)),
-    [daily],
-  );
+  const [granularity, setGranularity] = useState<Granularity>("month");
+  const [locked, setLocked] = useState(false);
 
   const scoped = useMemo(
     () => entries.filter((e) => e.entry_date >= from && e.entry_date <= to),
     [entries, from, to],
   );
 
-  const toggle = (key: FilterKey, value: string) =>
+  const toggle = (key: FilterKey, value: string) => {
+    if (locked) return;
     setFilters((current) => ({ ...current, [key]: current[key] === value ? undefined : value }));
+  };
 
   const filtered = useMemo(
-    () => scoped.filter((e) => matches(e, filters, bucket)),
-    [scoped, filters, bucket],
+    () => scoped.filter((e) => matches(e, filters, granularity)),
+    [scoped, filters, granularity],
   );
 
   const totals = useMemo(() => {
@@ -132,41 +143,43 @@ function DashboardPage() {
     return { income, expense, balance: income - expense, count: filtered.length };
   }, [filtered]);
 
-  const monthly = useMemo(() => {
-    const map = new Map<string, { month: string; recettes: number; depenses: number }>();
-    for (const entry of scoped.filter((e) => matches(e, filters, bucket, "month"))) {
-      const key = bucket(entry.entry_date);
-      const slot = map.get(key) ?? { month: key, recettes: 0, depenses: 0 };
+  const periods = useMemo(() => {
+    const map = new Map<string, { period: string; recettes: number; depenses: number }>();
+    for (const entry of scoped.filter((e) => matches(e, filters, granularity, "period"))) {
+      const key = bucketOf(entry.entry_date, granularity);
+      const slot = map.get(key) ?? { period: key, recettes: 0, depenses: 0 };
       if (isIncome(entry)) slot.recettes += Math.abs(entry.amount);
       else slot.depenses += Math.abs(entry.amount);
       map.set(key, slot);
     }
     return [...map.values()]
-      .sort((a, b) => a.month.localeCompare(b.month))
-      .map((row) => ({ ...row, solde: row.recettes - row.depenses, label: formatPeriod(row.month) }));
-  }, [scoped, filters, bucket]);
+      .sort((a, b) => a.period.localeCompare(b.period))
+      .map((row) => ({
+        ...row,
+        solde: row.recettes - row.depenses,
+        label: formatPeriod(row.period),
+      }));
+  }, [scoped, filters, granularity]);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, number>();
-    for (const entry of scoped.filter((e) => matches(e, filters, bucket, "category"))) {
+    for (const entry of scoped.filter((e) => matches(e, filters, granularity, "category"))) {
       if (isIncome(entry)) continue;
       const key = entry.category || "Sans catégorie";
       map.set(key, (map.get(key) ?? 0) + Math.abs(entry.amount));
     }
-    return [...map.entries()]
+    const rows = [...map.entries()]
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
-  }, [scoped, filters, bucket]);
+    const total = rows.reduce((sum, row) => sum + row.value, 0) || 1;
+    return rows.map((row) => ({ ...row, share: (row.value / total) * 100 }));
+  }, [scoped, filters, granularity]);
 
-  const byAccount = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const entry of scoped.filter((e) => matches(e, filters, bucket, "account"))) {
-      const key = entry.account || "Sans compte";
-      map.set(key, (map.get(key) ?? 0) + (isIncome(entry) ? Math.abs(entry.amount) : -Math.abs(entry.amount)));
-    }
-    return [...map.entries()].map(([name, solde]) => ({ name, solde }));
-  }, [scoped, filters, bucket]);
+  const tableRows = useMemo(
+    () => [...filtered].sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1)).slice(0, 50),
+    [filtered],
+  );
 
   const activeFilters = Object.entries(filters).filter(([, value]) => value) as Array<
     [FilterKey, string]
@@ -178,7 +191,9 @@ function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Cliquez sur une période, une catégorie ou un compte pour croiser les filtres.
+            {locked
+              ? "Sélection verrouillée : les filtres et la période sont figés."
+              : "Cliquez sur une période, une catégorie ou un compte pour croiser les filtres."}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -190,6 +205,7 @@ function DashboardPage() {
               id="from"
               type="date"
               value={from}
+              disabled={locked}
               onChange={(event) => setFrom(event.target.value)}
               className="w-40"
             />
@@ -202,33 +218,68 @@ function DashboardPage() {
               id="to"
               type="date"
               value={to}
+              disabled={locked}
               onChange={(event) => setTo(event.target.value)}
               className="w-40"
             />
           </div>
+          <div className="grid gap-1">
+            <Label className="text-xs text-muted-foreground">Abscisses</Label>
+            <Select
+              value={granularity}
+              disabled={locked}
+              onValueChange={(value) => setGranularity(value as Granularity)}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="year">Année</SelectItem>
+                <SelectItem value="month">Mois</SelectItem>
+                <SelectItem value="day">Jour</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button
             variant="outline"
             size="sm"
+            disabled={locked}
             onClick={() => {
-              const range = currentMonthRange();
+              const range = currentYearRange();
               setFrom(range.from);
               setTo(range.to);
             }}
           >
-            Mois en cours
+            Année en cours
           </Button>
+          <Button
+            variant={locked ? "default" : "outline"}
+            size="sm"
+            onClick={() => setLocked((value) => !value)}
+            aria-pressed={locked}
+            title={locked ? "Déverrouiller la sélection" : "Verrouiller la sélection"}
+          >
+            {locked ? <Lock className="mr-2 size-4" /> : <LockOpen className="mr-2 size-4" />}
+            {locked ? "Verrouillé" : "Verrouiller"}
+          </Button>
+          <SyncButton />
         </div>
         {activeFilters.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             {activeFilters.map(([key, value]) => (
               <Badge key={key} variant="secondary" className="gap-1">
-                {key === "month" ? formatPeriod(value) : value}
-                <button type="button" onClick={() => toggle(key, value)} aria-label="Retirer le filtre">
+                {key === "period" ? formatPeriod(value) : value}
+                <button
+                  type="button"
+                  disabled={locked}
+                  onClick={() => toggle(key, value)}
+                  aria-label="Retirer le filtre"
+                >
                   <X className="size-3" />
                 </button>
               </Badge>
             ))}
-            <Button variant="ghost" size="sm" onClick={() => setFilters({})}>
+            <Button variant="ghost" size="sm" disabled={locked} onClick={() => setFilters({})}>
               Tout effacer
             </Button>
           </div>
@@ -259,14 +310,12 @@ function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
-              Recettes / dépenses {daily ? "par jour" : "par mois"}
-            </CardTitle>
+            <CardTitle className="text-base">Recettes / dépenses</CardTitle>
             <CardDescription>Cliquez une barre pour filtrer sur la période</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly}>
+              <BarChart data={periods}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
@@ -277,12 +326,14 @@ function DashboardPage() {
                   name="Recettes"
                   fill="var(--chart-2)"
                   radius={[4, 4, 0, 0]}
-                  onClick={(payload: { month?: string }) => payload.month && toggle("month", payload.month)}
+                  onClick={(payload: { period?: string }) =>
+                    payload.period && toggle("period", payload.period)
+                  }
                 >
-                  {monthly.map((row) => (
+                  {periods.map((row) => (
                     <Cell
-                      key={row.month}
-                      opacity={!filters.month || filters.month === row.month ? 1 : 0.3}
+                      key={row.period}
+                      opacity={!filters.period || filters.period === row.period ? 1 : 0.3}
                     />
                   ))}
                 </Bar>
@@ -291,12 +342,14 @@ function DashboardPage() {
                   name="Dépenses"
                   fill="var(--chart-1)"
                   radius={[4, 4, 0, 0]}
-                  onClick={(payload: { month?: string }) => payload.month && toggle("month", payload.month)}
+                  onClick={(payload: { period?: string }) =>
+                    payload.period && toggle("period", payload.period)
+                  }
                 >
-                  {monthly.map((row) => (
+                  {periods.map((row) => (
                     <Cell
-                      key={row.month}
-                      opacity={!filters.month || filters.month === row.month ? 1 : 0.3}
+                      key={row.period}
+                      opacity={!filters.period || filters.period === row.period ? 1 : 0.3}
                     />
                   ))}
                 </Bar>
@@ -307,17 +360,23 @@ function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Solde {daily ? "journalier" : "mensuel"}</CardTitle>
+            <CardTitle className="text-base">Solde</CardTitle>
             <CardDescription>Évolution recettes moins dépenses</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthly}>
+              <LineChart data={periods}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip formatter={(value: number) => formatMoney(value)} />
-                <Line type="monotone" dataKey="solde" name="Solde" stroke="var(--chart-3)" strokeWidth={2} />
+                <Line
+                  type="monotone"
+                  dataKey="solde"
+                  name="Solde"
+                  stroke="var(--chart-3)"
+                  strokeWidth={2}
+                />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -337,7 +396,9 @@ function DashboardPage() {
                   nameKey="name"
                   innerRadius={55}
                   outerRadius={90}
-                  onClick={(payload: { name?: string }) => payload.name && toggle("category", payload.name)}
+                  onClick={(payload: { name?: string }) =>
+                    payload.name && toggle("category", payload.name)
+                  }
                 >
                   {byCategory.map((row, index) => (
                     <Cell
@@ -347,7 +408,13 @@ function DashboardPage() {
                     />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => formatMoney(value)} />
+                <Tooltip
+                  formatter={(value: number, _name, item) =>
+                    `${formatMoney(value)} — ${(
+                      (item?.payload as { share?: number })?.share ?? 0
+                    ).toFixed(1)} %`
+                  }
+                />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -356,32 +423,45 @@ function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Solde par compte</CardTitle>
-            <CardDescription>Cliquez une barre pour filtrer</CardDescription>
+            <CardTitle className="text-base">Écritures filtrées</CardTitle>
+            <CardDescription>
+              {tableRows.length} ligne(s) affichée(s) sur {totals.count}
+            </CardDescription>
           </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={byAccount} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(value: number) => formatMoney(value)} />
-                <Bar
-                  dataKey="solde"
-                  name="Solde"
-                  fill="var(--chart-4)"
-                  radius={[0, 4, 4, 0]}
-                  onClick={(payload: { name?: string }) => payload.name && toggle("account", payload.name)}
-                >
-                  {byAccount.map((row) => (
-                    <Cell
-                      key={row.name}
-                      opacity={!filters.account || filters.account === row.name ? 1 : 0.3}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <CardContent className="h-72 overflow-auto p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Date</TableHead>
+                  <TableHead>Émetteur</TableHead>
+                  <TableHead className="w-32">Catégorie</TableHead>
+                  <TableHead className="w-28 text-right">Montant</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableRows.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell className="text-xs">{formatPeriod(entry.entry_date)}</TableCell>
+                    <TableCell className="max-w-52 truncate text-xs" title={entry.payee}>
+                      {entry.payee || "—"}
+                    </TableCell>
+                    <TableCell className="text-xs">{entry.category || "Sans catégorie"}</TableCell>
+                    <TableCell
+                      className={`text-right text-xs ${isIncome(entry) ? "text-emerald-500" : ""}`}
+                    >
+                      {formatMoney(entry.amount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {tableRows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                      Aucune écriture sur la sélection.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>
@@ -389,8 +469,7 @@ function DashboardPage() {
       {isLoading && <p className="text-sm text-muted-foreground">Chargement des données…</p>}
       {!isLoading && entries.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Aucune donnée : lancez une mise à jour depuis Réglages → Mise à jour, ou importez un CSV
-          depuis l'onglet Data.
+          Aucune donnée : lancez une MAJ, ou importez un CSV depuis l'onglet Data.
         </p>
       )}
     </div>
