@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Check, KeyRound, Loader2, Palette, RefreshCw, User } from "lucide-react";
+import { Check, Database, KeyRound, Loader2, Palette, RefreshCw, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { changePassword, getAuthState } from "@/lib/auth.functions";
+import { changeLogin, changePassword, getAuthState } from "@/lib/auth.functions";
+import { Switch } from "@/components/ui/switch";
 import { useSettings } from "@/hooks/useSettings";
+import { backupNow, getBackups } from "@/lib/data.functions";
 import { THEMES } from "@/lib/themes";
 import { getN8nConfig, saveN8nConfig, syncFromN8n, testN8nConnection } from "@/lib/n8n.functions";
 
@@ -74,15 +76,35 @@ function SettingsPage() {
 function AccountSection() {
   const loadAuth = useServerFn(getAuthState);
   const runChange = useServerFn(changePassword);
+  const runChangeLogin = useServerFn(changeLogin);
   const [email, setEmail] = useState("");
+  const [loginDraft, setLoginDraft] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
     void loadAuth()
-      .then((state) => setEmail(state.email))
+      .then((state) => {
+        setEmail(state.email);
+        setLoginDraft(state.email);
+      })
       .catch(() => undefined);
   }, [loadAuth]);
+
+  async function submitLogin(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      const result = await runChangeLogin({
+        data: { login: loginDraft, current: loginPassword },
+      });
+      setEmail(result.login);
+      setLoginPassword("");
+      toast.success("Identifiant mis à jour");
+    } catch (error) {
+      toast.error((error as Error).message || "Modification impossible");
+    }
+  }
 
   async function submitPassword(event: React.FormEvent) {
     event.preventDefault();
@@ -103,10 +125,33 @@ function AccountSection() {
         <CardDescription>Identifiants de connexion à l'application.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>Compte</Label>
-          <Input value={email} readOnly />
-        </div>
+        <form className="space-y-3" onSubmit={submitLogin}>
+          <div className="space-y-2">
+            <Label htmlFor="login">Identifiant</Label>
+            <Input
+              id="login"
+              value={loginDraft}
+              onChange={(e) => setLoginDraft(e.target.value)}
+              autoComplete="username"
+              required
+            />
+            <p className="text-xs text-muted-foreground">Actuel : {email || "—"}</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="login-password">Mot de passe (confirmation)</Label>
+            <Input
+              id="login-password"
+              type="password"
+              autoComplete="current-password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              required
+            />
+          </div>
+          <Button type="submit" variant="outline">
+            <User className="mr-2 size-4" /> Changer l'identifiant
+          </Button>
+        </form>
         <Separator />
         <form className="space-y-3" onSubmit={submitPassword}>
           <div className="space-y-2">
@@ -140,6 +185,7 @@ function AccountSection() {
     </Card>
   );
 }
+
 
 function AppearanceSection() {
   const { settings, update } = useSettings();
@@ -304,31 +350,106 @@ function SyncSection() {
         </CardContent>
       </Card>
 
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle className="text-base">Comment brancher N8N</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>1. Dans N8N, créez un workflow avec un nœud <strong>Webhook</strong> en méthode GET.</p>
-          <p>
-            2. Ajoutez la lecture de votre table (Postgres, Google Sheets, Airtable…) puis un nœud
-            <strong> Respond to Webhook</strong> renvoyant un tableau JSON (ou un CSV).
-          </p>
-          <p>
-            3. Colonnes attendues : <code>Type, Date, Payee, Amount, Account, Description, Category</code>.
-            Les variantes françaises sont reconnues automatiquement.
-          </p>
-          <p>
-            4. Protégez le webhook (Header Auth) et renseignez ici le nom d'en-tête et le jeton. Le jeton
-            reste stocké côté serveur, jamais dans le navigateur.
-          </p>
-          <p>
-            5. Cliquez sur <strong>Tester</strong>, puis <strong>Aperçu</strong> pour vérifier l'impact,
-            puis <strong>MAJ</strong> pour appliquer.
-          </p>
-        </CardContent>
-      </Card>
-
+      <BackupSection />
     </div>
+  );
+}
+
+function BackupSection() {
+  const { settings, update } = useSettings();
+  const runBackup = useServerFn(backupNow);
+  const loadBackups = useServerFn(getBackups);
+  const backups = useQuery({ queryKey: ["backups"], queryFn: () => loadBackups({}) });
+  const [busy, setBusy] = useState(false);
+
+  async function now() {
+    setBusy(true);
+    try {
+      const result = await runBackup({});
+      toast.success(`Sauvegarde créée : ${result.file} (${result.rows} ligne(s))`);
+      await backups.refetch();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="max-w-2xl">
+      <CardHeader>
+        <CardTitle className="text-base">Sauvegarde automatique</CardTitle>
+        <CardDescription>
+          Export CSV horodaté de la table, écrit dans le volume local <code>data/exports</code>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label htmlFor="backup-enabled">Sauvegarde périodique</Label>
+            <p className="text-xs text-muted-foreground">
+              Déclenchée automatiquement lors de l'utilisation de l'application.
+            </p>
+          </div>
+          <Switch
+            id="backup-enabled"
+            checked={settings.backup_enabled}
+            onCheckedChange={(checked) => update.mutate({ backup_enabled: checked })}
+          />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="backup-interval">Intervalle (heures)</Label>
+            <Input
+              id="backup-interval"
+              type="number"
+              min={1}
+              max={720}
+              value={settings.backup_interval_hours}
+              onChange={(e) =>
+                update.mutate({ backup_interval_hours: Number(e.target.value) || 24 })
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="backup-keep">Sauvegardes conservées</Label>
+            <Input
+              id="backup-keep"
+              type="number"
+              min={1}
+              max={500}
+              value={settings.backup_keep}
+              onChange={(e) => update.mutate({ backup_keep: Number(e.target.value) || 30 })}
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={now} disabled={busy}>
+            {busy ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Database className="mr-2 size-4" />
+            )}
+            Sauvegarder maintenant
+          </Button>
+          {backups.data?.last && (
+            <Badge variant="secondary">
+              Dernière : {new Date(backups.data.last).toLocaleString("fr-FR")}
+            </Badge>
+          )}
+        </div>
+        {backups.data?.files?.length ? (
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {backups.data.files.slice(0, 5).map((file) => (
+              <li key={file.name}>
+                {file.name} — {(file.size / 1024).toFixed(1)} Ko
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Aucune sauvegarde pour le moment.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
