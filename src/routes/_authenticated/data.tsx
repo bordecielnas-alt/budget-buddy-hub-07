@@ -4,9 +4,11 @@ import { useMemo, useRef, useState } from "react";
 import { Download, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
+import { SyncButton } from "@/components/SyncButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -25,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { useEntries, useEntryMutations } from "@/hooks/useEntries";
 import { ENTRY_TYPES, formatMoney, type BudgetEntry } from "@/lib/budget-types";
+import { deleteEntries } from "@/lib/data.functions";
 import { toCsv } from "@/lib/n8n-parse";
 import { importRows } from "@/lib/n8n.functions";
 
@@ -35,7 +38,7 @@ export const Route = createFileRoute("/_authenticated/data")({
       {
         name: "description",
         content:
-          "Consultez et modifiez localement votre table budget : type, date, émetteur, montant, compte, description et catégorie.",
+          "Consultez et modifiez localement votre table budget : id, type, date, émetteur, montant, compte, description et catégorie.",
       },
       { property: "og:title", content: "Table budget — Budget Tracker" },
       {
@@ -51,23 +54,57 @@ function DataPage() {
   const { data: entries = [], isLoading } = useEntries();
   const { updateEntry, createEntry, deleteEntry, invalidate } = useEntryMutations();
   const runImport = useServerFn(importRows);
+  const runBulkDelete = useServerFn(deleteEntries);
   const fileInput = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return entries;
     return entries.filter((entry) =>
-      [entry.entry_type, entry.entry_date, entry.payee, entry.account, entry.description, entry.category]
+      [
+        entry.source_key ?? entry.id,
+        entry.entry_type,
+        entry.entry_date,
+        entry.payee,
+        entry.account,
+        entry.description,
+        entry.category,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(term),
     );
   }, [entries, search]);
 
+  const allSelected = rows.length > 0 && rows.every((row) => selected.includes(row.id));
+
+  function toggleRow(id: string, checked: boolean) {
+    setSelected((current) =>
+      checked ? [...new Set([...current, id])] : current.filter((value) => value !== id),
+    );
+  }
+
+  function toggleAll(checked: boolean) {
+    setSelected(checked ? rows.map((row) => row.id) : []);
+  }
+
   function patch(entry: BudgetEntry, field: keyof BudgetEntry, value: string) {
     const next = field === "amount" ? Number(value.replace(",", ".")) || 0 : value;
     updateEntry.mutate({ id: entry.id, patch: { [field]: next } as Partial<BudgetEntry> });
+  }
+
+  async function removeSelected() {
+    if (selected.length === 0) return;
+    try {
+      const result = await runBulkDelete({ data: { ids: selected } });
+      toast.success(`${result.deleted} ligne(s) supprimée(s)`);
+      setSelected([]);
+      invalidate();
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   }
 
   function exportCsv() {
@@ -86,7 +123,9 @@ function DataPage() {
     const text = await file.text();
     try {
       const report = await runImport({ data: { text, contentType: file.type || "text/csv" } });
-      toast.success(`${report.added} ajoutées, ${report.updated} mises à jour, ${report.skipped} ignorées`);
+      toast.success(
+        `${report.added} ajoutées, ${report.updated} mises à jour, ${report.protected} protégées, ${report.skipped} ignorées`,
+      );
       invalidate();
     } catch (error) {
       toast.error((error as Error).message);
@@ -101,7 +140,8 @@ function DataPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Data</h1>
           <p className="text-sm text-muted-foreground">
-            {entries.length} écritures. Les modifications locales sont marquées et conservées.
+            {entries.length} écritures. Une ligne modifiée localement est figée : les MAJ N8N ne
+            l'écrasent plus.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -111,6 +151,11 @@ function DataPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-44"
           />
+          {selected.length > 0 && (
+            <Button variant="destructive" size="sm" onClick={removeSelected}>
+              <Trash2 className="mr-2 size-4" /> Supprimer ({selected.length})
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
             <Upload className="mr-2 size-4" /> Importer
           </Button>
@@ -124,9 +169,10 @@ function DataPage() {
           <Button variant="outline" size="sm" onClick={exportCsv}>
             <Download className="mr-2 size-4" /> Exporter
           </Button>
-          <Button size="sm" onClick={() => createEntry.mutate()}>
+          <Button variant="outline" size="sm" onClick={() => createEntry.mutate()}>
             <Plus className="mr-2 size-4" /> Ligne
           </Button>
+          <SyncButton />
         </div>
       </div>
 
@@ -139,6 +185,14 @@ function DataPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={(checked) => toggleAll(checked === true)}
+                    aria-label="Tout sélectionner"
+                  />
+                </TableHead>
+                <TableHead className="w-44">ID</TableHead>
                 <TableHead className="w-32">Type</TableHead>
                 <TableHead className="w-36">Date</TableHead>
                 <TableHead>Émetteur</TableHead>
@@ -152,7 +206,20 @@ function DataPage() {
             </TableHeader>
             <TableBody>
               {rows.map((entry) => (
-                <TableRow key={entry.id}>
+                <TableRow key={entry.id} data-state={selected.includes(entry.id) ? "selected" : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selected.includes(entry.id)}
+                      onCheckedChange={(checked) => toggleRow(entry.id, checked === true)}
+                      aria-label="Sélectionner la ligne"
+                    />
+                  </TableCell>
+                  <TableCell
+                    className="max-w-44 truncate font-mono text-xs text-muted-foreground"
+                    title={entry.source_key ?? entry.id}
+                  >
+                    {entry.source_key ?? entry.id}
+                  </TableCell>
                   <TableCell>
                     <Select
                       value={entry.entry_type}
@@ -233,7 +300,7 @@ function DataPage() {
               ))}
               {!isLoading && rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={11} className="py-10 text-center text-sm text-muted-foreground">
                     Aucune écriture. Importez un CSV ou lancez une mise à jour N8N.
                   </TableCell>
                 </TableRow>
