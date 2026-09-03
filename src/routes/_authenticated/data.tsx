@@ -227,6 +227,29 @@ function DataPage() {
         </div>
       </div>
 
+      {selected.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 py-3">
+            <span className="text-sm text-muted-foreground">{selected.length} ligne(s) sélectionnée(s)</span>
+            <Input
+              placeholder="Nouvelle catégorie…"
+              value={bulkCategory}
+              onChange={(e) => setBulkCategory(e.target.value)}
+              className="w-56"
+            />
+            <Button size="sm" onClick={applyBulkCategory}>
+              Appliquer la catégorie
+            </Button>
+            <Button variant="destructive" size="sm" onClick={removeSelected}>
+              <Trash2 className="mr-2 size-4" /> Supprimer
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => toggleAll(false)}>
+              Désélectionner
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Table budget</CardTitle>
@@ -254,7 +277,80 @@ function DataPage() {
                 <TableHead className="w-24">Source</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
+              <TableRow className="hover:bg-transparent">
+                <TableHead />
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.id ?? ""}
+                    onChange={(e) => setColumnFilter("id", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead>
+                  <Select
+                    value={columnFilters.entry_type ?? "__all"}
+                    onValueChange={(value) => setColumnFilter("entry_type", value)}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue placeholder="Tous" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all">Tous</SelectItem>
+                      {ENTRY_TYPES.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableHead>
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="2026-01"
+                    value={columnFilters.entry_date ?? ""}
+                    onChange={(e) => setColumnFilter("entry_date", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.payee ?? ""}
+                    onChange={(e) => setColumnFilter("payee", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead />
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.account ?? ""}
+                    onChange={(e) => setColumnFilter("account", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.description ?? ""}
+                    onChange={(e) => setColumnFilter("description", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.category ?? ""}
+                    onChange={(e) => setColumnFilter("category", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead />
+                <TableHead />
+              </TableRow>
             </TableHeader>
+
             <TableBody>
               {rows.map((entry, index) => (
                 <TableRow key={entry.id} data-state={selected.includes(entry.id) ? "selected" : undefined}>
