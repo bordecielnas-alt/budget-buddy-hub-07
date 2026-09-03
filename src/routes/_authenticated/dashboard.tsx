@@ -190,9 +190,7 @@ function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            {locked
-              ? "Sélection verrouillée : les filtres et la période sont figés."
-              : "Cliquez sur une période, une catégorie ou un compte pour croiser les filtres."}
+            {totals.count} écriture(s) sur la période sélectionnée.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -204,7 +202,6 @@ function DashboardPage() {
               id="from"
               type="date"
               value={from}
-              disabled={locked}
               onChange={(event) => setFrom(event.target.value)}
               className="w-40"
             />
@@ -217,7 +214,6 @@ function DashboardPage() {
               id="to"
               type="date"
               value={to}
-              disabled={locked}
               onChange={(event) => setTo(event.target.value)}
               className="w-40"
             />
@@ -226,7 +222,6 @@ function DashboardPage() {
             <Label className="text-xs text-muted-foreground">Abscisses</Label>
             <Select
               value={granularity}
-              disabled={locked}
               onValueChange={(value) => setGranularity(value as Granularity)}
             >
               <SelectTrigger className="w-32">
@@ -239,28 +234,6 @@ function DashboardPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={locked}
-            onClick={() => {
-              const range = currentYearRange();
-              setFrom(range.from);
-              setTo(range.to);
-            }}
-          >
-            Année en cours
-          </Button>
-          <Button
-            variant={locked ? "default" : "outline"}
-            size="sm"
-            onClick={() => setLocked((value) => !value)}
-            aria-pressed={locked}
-            title={locked ? "Déverrouiller la sélection" : "Verrouiller la sélection"}
-          >
-            {locked ? <Lock className="mr-2 size-4" /> : <LockOpen className="mr-2 size-4" />}
-            {locked ? "Verrouillé" : "Verrouiller"}
-          </Button>
           <SyncButton />
         </div>
         {activeFilters.length > 0 && (
@@ -268,21 +241,17 @@ function DashboardPage() {
             {activeFilters.map(([key, value]) => (
               <Badge key={key} variant="secondary" className="gap-1">
                 {key === "period" ? formatPeriod(value) : value}
-                <button
-                  type="button"
-                  disabled={locked}
-                  onClick={() => toggle(key, value)}
-                  aria-label="Retirer le filtre"
-                >
+                <button type="button" onClick={() => toggle(key, value)} aria-label="Retirer le filtre">
                   <X className="size-3" />
                 </button>
               </Badge>
             ))}
-            <Button variant="ghost" size="sm" disabled={locked} onClick={() => setFilters({})}>
+            <Button variant="ghost" size="sm" onClick={() => setFilters({})}>
               Tout effacer
             </Button>
           </div>
         )}
+
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
