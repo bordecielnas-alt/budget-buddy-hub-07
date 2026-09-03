@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Lock, LockOpen, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { SyncButton } from "@/components/SyncButton";
 import { Badge } from "@/components/ui/badge";
