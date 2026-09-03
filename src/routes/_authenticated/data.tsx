@@ -253,15 +253,22 @@ function DataPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((entry) => (
+              {rows.map((entry, index) => (
                 <TableRow key={entry.id} data-state={selected.includes(entry.id) ? "selected" : undefined}>
-                  <TableCell>
+                  <TableCell
+                    onClickCapture={(event) => {
+                      extendRef.current = event.altKey || event.shiftKey;
+                    }}
+                  >
                     <Checkbox
                       checked={selected.includes(entry.id)}
-                      onCheckedChange={(checked) => toggleRow(entry.id, checked === true)}
+                      onCheckedChange={(checked) =>
+                        toggleRow(index, entry.id, checked === true, extendRef.current)
+                      }
                       aria-label="Sélectionner la ligne"
                     />
                   </TableCell>
+
                   <TableCell
                     className="max-w-44 truncate font-mono text-xs text-muted-foreground"
                     title={entry.source_key ?? entry.id}
