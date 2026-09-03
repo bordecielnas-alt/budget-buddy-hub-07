@@ -353,7 +353,7 @@ function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Dépenses par catégorie</CardTitle>
-            <CardDescription>Cliquez une part pour filtrer</CardDescription>
+            <CardDescription>Répartition des dépenses sur la sélection</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -362,8 +362,12 @@ function DashboardPage() {
                   data={byCategory}
                   dataKey="value"
                   nameKey="name"
-                  innerRadius={55}
-                  outerRadius={90}
+                  innerRadius={45}
+                  outerRadius={78}
+                  labelLine={false}
+                  label={({ name, share }: { name?: string; share?: number }) =>
+                    (share ?? 0) < 4 ? "" : `${name} ${(share ?? 0).toFixed(0)}%`
+                  }
                   onClick={(payload: { name?: string }) =>
                     payload.name && toggle("category", payload.name)
                   }
@@ -383,11 +387,11 @@ function DashboardPage() {
                     ).toFixed(1)} %`
                   }
                 />
-                <Legend />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
+
 
         <Card>
           <CardHeader>
