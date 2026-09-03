@@ -50,6 +50,8 @@ export const Route = createFileRoute("/_authenticated/data")({
   component: DataPage,
 });
 
+type ColumnKey = "id" | "entry_type" | "entry_date" | "payee" | "account" | "description" | "category";
+
 function DataPage() {
   const { data: entries = [], isLoading } = useEntries();
   const { updateEntry, createEntry, deleteEntry, invalidate } = useEntryMutations();
@@ -58,42 +60,88 @@ function DataPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<ColumnKey, string>>>({});
+  const [bulkCategory, setBulkCategory] = useState("");
+  const lastIndex = useRef<number | null>(null);
+
+  const setColumnFilter = (key: ColumnKey, value: string) =>
+    setColumnFilters((current) => ({ ...current, [key]: value }));
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return entries;
-    return entries.filter((entry) =>
-      [
-        entry.source_key ?? entry.id,
-        entry.entry_type,
-        entry.entry_date,
-        entry.payee,
-        entry.account,
-        entry.description,
-        entry.category,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [entries, search]);
+    const fields: Record<ColumnKey, (entry: BudgetEntry) => string> = {
+      id: (e) => e.source_key ?? e.id,
+      entry_type: (e) => e.entry_type ?? "",
+      entry_date: (e) => e.entry_date ?? "",
+      payee: (e) => e.payee ?? "",
+      account: (e) => e.account ?? "",
+      description: (e) => e.description ?? "",
+      category: (e) => e.category ?? "",
+    };
+    return entries.filter((entry) => {
+      if (term) {
+        const haystack = (Object.keys(fields) as ColumnKey[])
+          .map((key) => fields[key](entry))
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+      return (Object.entries(columnFilters) as Array<[ColumnKey, string | undefined]>).every(
+        ([key, value]) => {
+          if (!value || value === "__all") return true;
+          const cell = fields[key](entry).toLowerCase();
+          if (key === "entry_type") return cell === value.toLowerCase();
+          return cell.includes(value.toLowerCase());
+        },
+      );
+    });
+  }, [entries, search, columnFilters]);
 
   const allSelected = rows.length > 0 && rows.every((row) => selected.includes(row.id));
 
-  function toggleRow(id: string, checked: boolean) {
-    setSelected((current) =>
-      checked ? [...new Set([...current, id])] : current.filter((value) => value !== id),
-    );
+  function toggleRow(index: number, id: string, checked: boolean, extend: boolean) {
+    if (extend && lastIndex.current !== null) {
+      const start = Math.min(lastIndex.current, index);
+      const end = Math.max(lastIndex.current, index);
+      const ids = rows.slice(start, end + 1).map((row) => row.id);
+      setSelected((current) =>
+        checked
+          ? [...new Set([...current, ...ids])]
+          : current.filter((value) => !ids.includes(value)),
+      );
+    } else {
+      setSelected((current) =>
+        checked ? [...new Set([...current, id])] : current.filter((value) => value !== id),
+      );
+    }
+    lastIndex.current = index;
   }
 
   function toggleAll(checked: boolean) {
     setSelected(checked ? rows.map((row) => row.id) : []);
+    lastIndex.current = null;
+  }
+
+  async function applyBulkCategory() {
+    const value = bulkCategory.trim();
+    if (selected.length === 0) return;
+    try {
+      for (const id of selected) {
+        await updateEntry.mutateAsync({ id, patch: { category: value } });
+      }
+      toast.success(`Catégorie appliquée à ${selected.length} ligne(s)`);
+      setBulkCategory("");
+      invalidate();
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   }
 
   function patch(entry: BudgetEntry, field: keyof BudgetEntry, value: string) {
     const next = field === "amount" ? Number(value.replace(",", ".")) || 0 : value;
     updateEntry.mutate({ id: entry.id, patch: { [field]: next } as Partial<BudgetEntry> });
   }
+
 
   async function removeSelected() {
     if (selected.length === 0) return;
