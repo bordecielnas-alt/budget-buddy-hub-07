@@ -190,10 +190,11 @@ function DataPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Data</h1>
           <p className="text-sm text-muted-foreground">
-            {entries.length} écritures. Une ligne modifiée localement est figée : les MAJ N8N ne
-            l'écrasent plus.
+            {entries.length} écritures. Alt ou Maj + clic sur une case pour sélectionner une plage.
+            Une ligne modifiée localement est figée : les MAJ N8N ne l'écrasent plus.
           </p>
         </div>
+
         <div className="flex flex-wrap gap-2">
           <Input
             placeholder="Rechercher…"
