@@ -63,6 +63,8 @@ function DataPage() {
   const [columnFilters, setColumnFilters] = useState<Partial<Record<ColumnKey, string>>>({});
   const [bulkCategory, setBulkCategory] = useState("");
   const lastIndex = useRef<number | null>(null);
+  const extendRef = useRef(false);
+
 
   const setColumnFilter = (key: ColumnKey, value: string) =>
     setColumnFilters((current) => ({ ...current, [key]: value }));
