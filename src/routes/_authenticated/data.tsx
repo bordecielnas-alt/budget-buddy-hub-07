@@ -50,6 +50,8 @@ export const Route = createFileRoute("/_authenticated/data")({
   component: DataPage,
 });
 
+type ColumnKey = "id" | "entry_type" | "entry_date" | "payee" | "account" | "description" | "category";
+
 function DataPage() {
   const { data: entries = [], isLoading } = useEntries();
   const { updateEntry, createEntry, deleteEntry, invalidate } = useEntryMutations();
@@ -58,42 +60,90 @@ function DataPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<ColumnKey, string>>>({});
+  const [bulkCategory, setBulkCategory] = useState("");
+  const lastIndex = useRef<number | null>(null);
+  const extendRef = useRef(false);
+
+
+  const setColumnFilter = (key: ColumnKey, value: string) =>
+    setColumnFilters((current) => ({ ...current, [key]: value }));
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return entries;
-    return entries.filter((entry) =>
-      [
-        entry.source_key ?? entry.id,
-        entry.entry_type,
-        entry.entry_date,
-        entry.payee,
-        entry.account,
-        entry.description,
-        entry.category,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [entries, search]);
+    const fields: Record<ColumnKey, (entry: BudgetEntry) => string> = {
+      id: (e) => e.source_key ?? e.id,
+      entry_type: (e) => e.entry_type ?? "",
+      entry_date: (e) => e.entry_date ?? "",
+      payee: (e) => e.payee ?? "",
+      account: (e) => e.account ?? "",
+      description: (e) => e.description ?? "",
+      category: (e) => e.category ?? "",
+    };
+    return entries.filter((entry) => {
+      if (term) {
+        const haystack = (Object.keys(fields) as ColumnKey[])
+          .map((key) => fields[key](entry))
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+      return (Object.entries(columnFilters) as Array<[ColumnKey, string | undefined]>).every(
+        ([key, value]) => {
+          if (!value || value === "__all") return true;
+          const cell = fields[key](entry).toLowerCase();
+          if (key === "entry_type") return cell === value.toLowerCase();
+          return cell.includes(value.toLowerCase());
+        },
+      );
+    });
+  }, [entries, search, columnFilters]);
 
   const allSelected = rows.length > 0 && rows.every((row) => selected.includes(row.id));
 
-  function toggleRow(id: string, checked: boolean) {
-    setSelected((current) =>
-      checked ? [...new Set([...current, id])] : current.filter((value) => value !== id),
-    );
+  function toggleRow(index: number, id: string, checked: boolean, extend: boolean) {
+    if (extend && lastIndex.current !== null) {
+      const start = Math.min(lastIndex.current, index);
+      const end = Math.max(lastIndex.current, index);
+      const ids = rows.slice(start, end + 1).map((row) => row.id);
+      setSelected((current) =>
+        checked
+          ? [...new Set([...current, ...ids])]
+          : current.filter((value) => !ids.includes(value)),
+      );
+    } else {
+      setSelected((current) =>
+        checked ? [...new Set([...current, id])] : current.filter((value) => value !== id),
+      );
+    }
+    lastIndex.current = index;
   }
 
   function toggleAll(checked: boolean) {
     setSelected(checked ? rows.map((row) => row.id) : []);
+    lastIndex.current = null;
+  }
+
+  async function applyBulkCategory() {
+    const value = bulkCategory.trim();
+    if (selected.length === 0) return;
+    try {
+      for (const id of selected) {
+        await updateEntry.mutateAsync({ id, patch: { category: value } });
+      }
+      toast.success(`Catégorie appliquée à ${selected.length} ligne(s)`);
+      setBulkCategory("");
+      invalidate();
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   }
 
   function patch(entry: BudgetEntry, field: keyof BudgetEntry, value: string) {
     const next = field === "amount" ? Number(value.replace(",", ".")) || 0 : value;
     updateEntry.mutate({ id: entry.id, patch: { [field]: next } as Partial<BudgetEntry> });
   }
+
 
   async function removeSelected() {
     if (selected.length === 0) return;
@@ -140,10 +190,11 @@ function DataPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Data</h1>
           <p className="text-sm text-muted-foreground">
-            {entries.length} écritures. Une ligne modifiée localement est figée : les MAJ N8N ne
-            l'écrasent plus.
+            {entries.length} écritures. Alt ou Maj + clic sur une case pour sélectionner une plage.
+            Une ligne modifiée localement est figée : les MAJ N8N ne l'écrasent plus.
           </p>
         </div>
+
         <div className="flex flex-wrap gap-2">
           <Input
             placeholder="Rechercher…"
@@ -176,6 +227,29 @@ function DataPage() {
         </div>
       </div>
 
+      {selected.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 py-3">
+            <span className="text-sm text-muted-foreground">{selected.length} ligne(s) sélectionnée(s)</span>
+            <Input
+              placeholder="Nouvelle catégorie…"
+              value={bulkCategory}
+              onChange={(e) => setBulkCategory(e.target.value)}
+              className="w-56"
+            />
+            <Button size="sm" onClick={applyBulkCategory}>
+              Appliquer la catégorie
+            </Button>
+            <Button variant="destructive" size="sm" onClick={removeSelected}>
+              <Trash2 className="mr-2 size-4" /> Supprimer
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => toggleAll(false)}>
+              Désélectionner
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Table budget</CardTitle>
@@ -203,17 +277,97 @@ function DataPage() {
                 <TableHead className="w-24">Source</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
+              <TableRow className="hover:bg-transparent">
+                <TableHead />
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.id ?? ""}
+                    onChange={(e) => setColumnFilter("id", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead>
+                  <Select
+                    value={columnFilters.entry_type ?? "__all"}
+                    onValueChange={(value) => setColumnFilter("entry_type", value)}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue placeholder="Tous" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all">Tous</SelectItem>
+                      {ENTRY_TYPES.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableHead>
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="2026-01"
+                    value={columnFilters.entry_date ?? ""}
+                    onChange={(e) => setColumnFilter("entry_date", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.payee ?? ""}
+                    onChange={(e) => setColumnFilter("payee", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead />
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.account ?? ""}
+                    onChange={(e) => setColumnFilter("account", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.description ?? ""}
+                    onChange={(e) => setColumnFilter("description", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Filtrer"
+                    value={columnFilters.category ?? ""}
+                    onChange={(e) => setColumnFilter("category", e.target.value)}
+                  />
+                </TableHead>
+                <TableHead />
+                <TableHead />
+              </TableRow>
             </TableHeader>
+
             <TableBody>
-              {rows.map((entry) => (
+              {rows.map((entry, index) => (
                 <TableRow key={entry.id} data-state={selected.includes(entry.id) ? "selected" : undefined}>
-                  <TableCell>
+                  <TableCell
+                    onClickCapture={(event) => {
+                      extendRef.current = event.altKey || event.shiftKey;
+                    }}
+                  >
                     <Checkbox
                       checked={selected.includes(entry.id)}
-                      onCheckedChange={(checked) => toggleRow(entry.id, checked === true)}
+                      onCheckedChange={(checked) =>
+                        toggleRow(index, entry.id, checked === true, extendRef.current)
+                      }
                       aria-label="Sélectionner la ligne"
                     />
                   </TableCell>
+
                   <TableCell
                     className="max-w-44 truncate font-mono text-xs text-muted-foreground"
                     title={entry.source_key ?? entry.id}

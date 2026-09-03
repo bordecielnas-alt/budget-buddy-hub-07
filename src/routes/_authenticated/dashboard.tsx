@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Lock, LockOpen, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { SyncButton } from "@/components/SyncButton";
 import { Badge } from "@/components/ui/badge";
@@ -116,7 +116,6 @@ function DashboardPage() {
   const [from, setFrom] = useState(initialRange.from);
   const [to, setTo] = useState(initialRange.to);
   const [granularity, setGranularity] = useState<Granularity>("month");
-  const [locked, setLocked] = useState(false);
 
   const scoped = useMemo(
     () => entries.filter((e) => e.entry_date >= from && e.entry_date <= to),
@@ -124,9 +123,9 @@ function DashboardPage() {
   );
 
   const toggle = (key: FilterKey, value: string) => {
-    if (locked) return;
     setFilters((current) => ({ ...current, [key]: current[key] === value ? undefined : value }));
   };
+
 
   const filtered = useMemo(
     () => scoped.filter((e) => matches(e, filters, granularity)),
@@ -191,9 +190,7 @@ function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            {locked
-              ? "Sélection verrouillée : les filtres et la période sont figés."
-              : "Cliquez sur une période, une catégorie ou un compte pour croiser les filtres."}
+            {totals.count} écriture(s) sur la période sélectionnée.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -205,7 +202,6 @@ function DashboardPage() {
               id="from"
               type="date"
               value={from}
-              disabled={locked}
               onChange={(event) => setFrom(event.target.value)}
               className="w-40"
             />
@@ -218,7 +214,6 @@ function DashboardPage() {
               id="to"
               type="date"
               value={to}
-              disabled={locked}
               onChange={(event) => setTo(event.target.value)}
               className="w-40"
             />
@@ -227,7 +222,6 @@ function DashboardPage() {
             <Label className="text-xs text-muted-foreground">Abscisses</Label>
             <Select
               value={granularity}
-              disabled={locked}
               onValueChange={(value) => setGranularity(value as Granularity)}
             >
               <SelectTrigger className="w-32">
@@ -240,28 +234,6 @@ function DashboardPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={locked}
-            onClick={() => {
-              const range = currentYearRange();
-              setFrom(range.from);
-              setTo(range.to);
-            }}
-          >
-            Année en cours
-          </Button>
-          <Button
-            variant={locked ? "default" : "outline"}
-            size="sm"
-            onClick={() => setLocked((value) => !value)}
-            aria-pressed={locked}
-            title={locked ? "Déverrouiller la sélection" : "Verrouiller la sélection"}
-          >
-            {locked ? <Lock className="mr-2 size-4" /> : <LockOpen className="mr-2 size-4" />}
-            {locked ? "Verrouillé" : "Verrouiller"}
-          </Button>
           <SyncButton />
         </div>
         {activeFilters.length > 0 && (
@@ -269,21 +241,17 @@ function DashboardPage() {
             {activeFilters.map(([key, value]) => (
               <Badge key={key} variant="secondary" className="gap-1">
                 {key === "period" ? formatPeriod(value) : value}
-                <button
-                  type="button"
-                  disabled={locked}
-                  onClick={() => toggle(key, value)}
-                  aria-label="Retirer le filtre"
-                >
+                <button type="button" onClick={() => toggle(key, value)} aria-label="Retirer le filtre">
                   <X className="size-3" />
                 </button>
               </Badge>
             ))}
-            <Button variant="ghost" size="sm" disabled={locked} onClick={() => setFilters({})}>
+            <Button variant="ghost" size="sm" onClick={() => setFilters({})}>
               Tout effacer
             </Button>
           </div>
         )}
+
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -385,7 +353,7 @@ function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Dépenses par catégorie</CardTitle>
-            <CardDescription>Cliquez une part pour filtrer</CardDescription>
+            <CardDescription>Répartition des dépenses sur la sélection</CardDescription>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -394,8 +362,12 @@ function DashboardPage() {
                   data={byCategory}
                   dataKey="value"
                   nameKey="name"
-                  innerRadius={55}
-                  outerRadius={90}
+                  innerRadius={45}
+                  outerRadius={78}
+                  labelLine={false}
+                  label={({ name, share }: { name?: string; share?: number }) =>
+                    (share ?? 0) < 4 ? "" : `${name} ${(share ?? 0).toFixed(0)}%`
+                  }
                   onClick={(payload: { name?: string }) =>
                     payload.name && toggle("category", payload.name)
                   }
@@ -415,11 +387,11 @@ function DashboardPage() {
                     ).toFixed(1)} %`
                   }
                 />
-                <Legend />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
+
 
         <Card>
           <CardHeader>
