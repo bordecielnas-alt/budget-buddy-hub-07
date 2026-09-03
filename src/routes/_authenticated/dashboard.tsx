@@ -116,7 +116,6 @@ function DashboardPage() {
   const [from, setFrom] = useState(initialRange.from);
   const [to, setTo] = useState(initialRange.to);
   const [granularity, setGranularity] = useState<Granularity>("month");
-  const [locked, setLocked] = useState(false);
 
   const scoped = useMemo(
     () => entries.filter((e) => e.entry_date >= from && e.entry_date <= to),
@@ -124,9 +123,9 @@ function DashboardPage() {
   );
 
   const toggle = (key: FilterKey, value: string) => {
-    if (locked) return;
     setFilters((current) => ({ ...current, [key]: current[key] === value ? undefined : value }));
   };
+
 
   const filtered = useMemo(
     () => scoped.filter((e) => matches(e, filters, granularity)),
